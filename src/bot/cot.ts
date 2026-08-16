@@ -149,6 +149,9 @@ export class CotPublisher {
   readonly chatId: string;
   readonly originMessageId: string;
   readonly runId: string;
+  /** Simple per-run sequence number for messageId namespaces (dsh-lark
+   * parity: `reasoning-<turn>` etc. use plain numbers, not UUIDs). */
+  readonly runSeq: number;
   readonly scope: string;
   readonly inputPreview: string;
   ref: CotRef | undefined;
@@ -162,6 +165,7 @@ export class CotPublisher {
   private flushTail: Promise<void> = Promise.resolve();
   private completed = false;
   private timer: NodeJS.Timeout | undefined;
+  private static seqCounter = 0;
 
   constructor(opts: {
     client: Pick<CotClient, 'create' | 'update' | 'complete'>;
@@ -173,6 +177,7 @@ export class CotPublisher {
   }) {
     this.client = opts.client;
     this.chatId = opts.chatId;
+    this.runSeq = ++CotPublisher.seqCounter;
     this.originMessageId = opts.originMessageId;
     this.runId = opts.runId;
     this.scope = opts.scope;
@@ -335,7 +340,8 @@ export async function consumeCotEvents(
   let textMessageIndex = 0;
   let textMessageId: string | undefined;
   const toolBrief = new Map<string, { name: string; input: unknown }>();
-  const reasoningMessageId = `reasoning-${publisher.runId}`;
+  // dsh-lark parity: plain numeric namespace, not a UUID.
+  const reasoningMessageId = `reasoning-${publisher.runSeq}`;
 
   try {
     for await (const evt of events) {
@@ -391,7 +397,7 @@ export async function consumeCotEvents(
         const detailed = opts.detail === 'detailed';
         const brief = toolBrief.get(evt.id);
         publisher.enqueue('TOOL_CALL_RESULT', {
-          messageId: `tool-result-${evt.id}`,
+          messageId: `result-${evt.id}`,
           toolCallId: evt.id,
           role: 'tool',
           // FIX(fork): structured code-block content like dsh-lark's
@@ -412,7 +418,7 @@ export async function consumeCotEvents(
         // RUN_STARTED note; STEP_* is non-standard and breaks rendering.
         if (!textMessageOpen) {
           textMessageOpen = true;
-          textMessageId = `text-${publisher.runId}-${++textMessageIndex}`;
+          textMessageId = `text-${publisher.runSeq}-${++textMessageIndex}`;
           publisher.enqueue('TEXT_MESSAGE_START', { messageId: textMessageId, role: 'assistant' });
         }
         publisher.enqueue('TEXT_MESSAGE_CONTENT', {

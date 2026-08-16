@@ -13863,11 +13863,14 @@ var CotClient = class {
     });
   }
 };
-var CotPublisher = class {
+var CotPublisher = class _CotPublisher {
   client;
   chatId;
   originMessageId;
   runId;
+  /** Simple per-run sequence number for messageId namespaces (dsh-lark
+   * parity: `reasoning-<turn>` etc. use plain numbers, not UUIDs). */
+  runSeq;
   scope;
   inputPreview;
   ref;
@@ -13881,9 +13884,11 @@ var CotPublisher = class {
   flushTail = Promise.resolve();
   completed = false;
   timer;
+  static seqCounter = 0;
   constructor(opts) {
     this.client = opts.client;
     this.chatId = opts.chatId;
+    this.runSeq = ++_CotPublisher.seqCounter;
     this.originMessageId = opts.originMessageId;
     this.runId = opts.runId;
     this.scope = opts.scope;
@@ -14002,7 +14007,7 @@ async function consumeCotEvents(events, publisher, opts) {
   let textMessageIndex = 0;
   let textMessageId;
   const toolBrief = /* @__PURE__ */ new Map();
-  const reasoningMessageId = `reasoning-${publisher.runId}`;
+  const reasoningMessageId = `reasoning-${publisher.runSeq}`;
   try {
     for await (const evt of events) {
       if (evt.type === "system" || evt.type === "usage") continue;
@@ -14052,7 +14057,7 @@ async function consumeCotEvents(events, publisher, opts) {
         const detailed = opts.detail === "detailed";
         const brief = toolBrief.get(evt.id);
         publisher.enqueue("TOOL_CALL_RESULT", {
-          messageId: `tool-result-${evt.id}`,
+          messageId: `result-${evt.id}`,
           toolCallId: evt.id,
           role: "tool",
           // FIX(fork): structured code-block content like dsh-lark's
@@ -14067,7 +14072,7 @@ async function consumeCotEvents(events, publisher, opts) {
         closeReasoningIfNeeded();
         if (!textMessageOpen) {
           textMessageOpen = true;
-          textMessageId = `text-${publisher.runId}-${++textMessageIndex}`;
+          textMessageId = `text-${publisher.runSeq}-${++textMessageIndex}`;
           publisher.enqueue("TEXT_MESSAGE_START", { messageId: textMessageId, role: "assistant" });
         }
         publisher.enqueue("TEXT_MESSAGE_CONTENT", {
@@ -18138,6 +18143,7 @@ async function* createEventStream5(ctx) {
   let sessionId;
   let finalText = "";
   let terminalEmitted = false;
+  const diag2 = { thinking: 0, toolUse: 0, toolResult: 0 };
   const emitError = (message) => ({
     type: "error",
     message,
@@ -18169,9 +18175,13 @@ async function* createEventStream5(ctx) {
           finalText += ev.delta;
           continue;
         }
+        if (ev.type === "thinking") diag2.thinking++;
+        if (ev.type === "tool_use") diag2.toolUse++;
+        if (ev.type === "tool_result") diag2.toolResult++;
         yield ev;
       }
     }
+    log.info("agent", "hermes-events", { sessionId, thinking: diag2.thinking, toolUse: diag2.toolUse, toolResult: diag2.toolResult });
   } catch (err) {
     if (ctx.getStopReason()) {
       yield { type: "done", sessionId, terminationReason: "interrupted" };

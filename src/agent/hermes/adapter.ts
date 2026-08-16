@@ -147,6 +147,8 @@ async function* createEventStream(ctx: StreamContext): AsyncGenerator<AgentEvent
   let sessionId: string | undefined;
   let finalText = '';
   let terminalEmitted = false;
+  // diagnostics: how many reasoning/tool events actually flowed this run
+  const diag = { thinking: 0, toolUse: 0, toolResult: 0 };
 
   const emitError = (message: string): AgentEvent => ({
     type: 'error',
@@ -185,9 +187,13 @@ async function* createEventStream(ctx: StreamContext): AsyncGenerator<AgentEvent
           finalText += (ev as { delta: string }).delta;
           continue;
         }
+        if (ev.type === 'thinking') diag.thinking++;
+        if (ev.type === 'tool_use') diag.toolUse++;
+        if (ev.type === 'tool_result') diag.toolResult++;
         yield ev;
       }
     }
+    log.info('agent', 'hermes-events', { sessionId, thinking: diag.thinking, toolUse: diag.toolUse, toolResult: diag.toolResult });
   } catch (err) {
     if (ctx.getStopReason()) {
       yield { type: 'done', sessionId, terminationReason: 'interrupted' };
