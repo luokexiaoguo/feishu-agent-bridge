@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import type { AgentEvent } from '../agent/types';
 import type { CotMessagesMode, TenantBrand } from '../config/schema';
 import { log } from '../core/logger';
@@ -147,7 +148,10 @@ export class CotPublisher {
   private buffer: CotEvent[] = [];
   /** Strictly-increasing timestamp source — see {@link nextTimestamp}. */
   private lastTimestamp = 0;
-  private flushing: Promise<void> | undefined;
+  /** Serialized flush chain: every update runs strictly in order, and
+   * `finish()` awaits the tail so nothing can land after `complete()`. */
+  private flushTail: Promise<void> = Promise.resolve();
+  private completed = false;
   private timer: NodeJS.Timeout | undefined;
 
   constructor(opts: {
@@ -204,7 +208,7 @@ export class CotPublisher {
   }
 
   enqueue(eventType: string, content: unknown): void {
-    if (this.disabled || !this.ref) return;
+    if (this.disabled || !this.ref || this.completed) return;
     this.buffer.push({
       event_type: eventType,
       content: JSON.stringify(content),
@@ -231,10 +235,15 @@ export class CotPublisher {
       clearTimeout(this.timer);
       this.timer = undefined;
     }
+    // Enqueue a final drain pass and wait for the whole chain: every buffered
+    // event must land BEFORE completing the cot — otherwise a trailing batch
+    // races the terminal state and the API rejects it with 10001 "COT
+    // already in terminal state".
     await this.flush();
     if (this.disabled || !this.ref) return;
     try {
       await this.client.complete(this.ref, reason);
+      this.completed = true;
       log.info('cot', 'completed', { cotId: this.ref.cotId, reason });
     } catch (err) {
       log.warn('cot', 'complete-failed', { err: err instanceof Error ? err.message : String(err) });
@@ -242,38 +251,55 @@ export class CotPublisher {
   }
 
   private scheduleFlush(): void {
-    if (this.timer || this.flushing) return;
+    if (this.timer || this.completed) return;
     this.timer = setTimeout(() => {
       this.timer = undefined;
       void this.flush();
     }, COT_UPDATE_THROTTLE_MS);
   }
 
-  private async flush(): Promise<void> {
-    if (this.disabled || !this.ref) return;
-    if (this.flushing) {
-      await this.flushing;
-      if (this.buffer.length > 0 && !this.disabled) await this.flush();
-      return;
-    }
-    // FIX(fork): the message_cot API caps events per write at 50 — a larger
-    // batch fails with 400 99992402 "field validation failed". Token-level
-    // streams (hermes agent_thought_chunk) pile up far more than 50 within
-    // one 600ms flush window. Split into ≤50-event writes and keep sending
-    // until the buffer drains (no extra throttle delay between splits).
-    const events = this.buffer.splice(0, MAX_EVENTS_PER_WRITE);
-    if (events.length === 0) return;
-    this.flushing = this.client.update(this.ref, events)
-      .catch((err) => {
+  /**
+   * Enqueue one drain pass on the serialized chain. All updates run in
+   * submission order; splits (≤50 events per write) are drained inside a
+   * single pass with no throttle delay between them.
+   */
+  private flush(): Promise<void> {
+    this.flushTail = this.flushTail.then(() => this.drain());
+    return this.flushTail;
+  }
+
+  private async drain(): Promise<void> {
+    if (this.disabled || !this.ref || this.completed) return;
+    while (this.buffer.length > 0 && !this.disabled && !this.completed) {
+      // FIX(fork): the message_cot API caps events per write at 50 — a larger
+      // batch fails with 400 99992402 "field validation failed". Token-level
+      // streams (hermes agent_thought_chunk) pile up far more than 50 within
+      // one 600ms flush window. Split into ≤50-event writes and keep sending
+      // until the buffer drains.
+      const events = this.buffer.splice(0, MAX_EVENTS_PER_WRITE);
+      if (events.length === 0) return;
+      try {
+        await this.client.update(this.ref, events);
+      } catch (err) {
         this.disabled = true;
         this.degradedReason = err instanceof Error ? err.message : String(err);
         log.warn('cot', 'update-failed', { err: this.degradedReason });
-      })
-      .finally(() => {
-        this.flushing = undefined;
-        if (this.buffer.length > 0 && !this.disabled) void this.flush();
-      });
-    await this.flushing;
+        // FIX(fork) debug: the daemon logger truncates messages to ~120
+        // chars, hiding which event made the API reject the batch. Dump the
+        // full error plus the batch's event types to a side file.
+        try {
+          fs.appendFileSync(
+            process.env.HOME + '/.lark-channel/cot-debug.log',
+            `${new Date().toISOString()} ERR=${this.degradedReason}\n` +
+              `TYPES=${JSON.stringify(events.map((e) => e.event_type))}\n` +
+              `SAMPLE=${JSON.stringify(events.slice(0, 3)).slice(0, 800)}\n\n`,
+          );
+        } catch {
+          /* debug file is best-effort */
+        }
+        return;
+      }
+    }
   }
 }
 

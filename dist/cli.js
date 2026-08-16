@@ -13765,6 +13765,7 @@ async function removeReaction(channel, messageId, reactionId) {
 }
 
 // src/bot/cot.ts
+import * as fs from "fs";
 var ENDPOINTS2 = {
   feishu: "https://open.feishu.cn",
   lark: "https://open.larksuite.com"
@@ -13870,7 +13871,10 @@ var CotPublisher = class {
   buffer = [];
   /** Strictly-increasing timestamp source — see {@link nextTimestamp}. */
   lastTimestamp = 0;
-  flushing;
+  /** Serialized flush chain: every update runs strictly in order, and
+   * `finish()` awaits the tail so nothing can land after `complete()`. */
+  flushTail = Promise.resolve();
+  completed = false;
   timer;
   constructor(opts) {
     this.client = opts.client;
@@ -13911,7 +13915,7 @@ var CotPublisher = class {
     });
   }
   enqueue(eventType, content) {
-    if (this.disabled || !this.ref) return;
+    if (this.disabled || !this.ref || this.completed) return;
     this.buffer.push({
       event_type: eventType,
       content: JSON.stringify(content),
@@ -13940,36 +13944,53 @@ var CotPublisher = class {
     if (this.disabled || !this.ref) return;
     try {
       await this.client.complete(this.ref, reason);
+      this.completed = true;
       log.info("cot", "completed", { cotId: this.ref.cotId, reason });
     } catch (err) {
       log.warn("cot", "complete-failed", { err: err instanceof Error ? err.message : String(err) });
     }
   }
   scheduleFlush() {
-    if (this.timer || this.flushing) return;
+    if (this.timer || this.completed) return;
     this.timer = setTimeout(() => {
       this.timer = void 0;
       void this.flush();
     }, COT_UPDATE_THROTTLE_MS);
   }
-  async flush() {
-    if (this.disabled || !this.ref) return;
-    if (this.flushing) {
-      await this.flushing;
-      if (this.buffer.length > 0 && !this.disabled) await this.flush();
-      return;
+  /**
+   * Enqueue one drain pass on the serialized chain. All updates run in
+   * submission order; splits (≤50 events per write) are drained inside a
+   * single pass with no throttle delay between them.
+   */
+  flush() {
+    this.flushTail = this.flushTail.then(() => this.drain());
+    return this.flushTail;
+  }
+  async drain() {
+    if (this.disabled || !this.ref || this.completed) return;
+    while (this.buffer.length > 0 && !this.disabled && !this.completed) {
+      const events = this.buffer.splice(0, MAX_EVENTS_PER_WRITE);
+      if (events.length === 0) return;
+      try {
+        await this.client.update(this.ref, events);
+      } catch (err) {
+        this.disabled = true;
+        this.degradedReason = err instanceof Error ? err.message : String(err);
+        log.warn("cot", "update-failed", { err: this.degradedReason });
+        try {
+          fs.appendFileSync(
+            process.env.HOME + "/.lark-channel/cot-debug.log",
+            `${(/* @__PURE__ */ new Date()).toISOString()} ERR=${this.degradedReason}
+TYPES=${JSON.stringify(events.map((e) => e.event_type))}
+SAMPLE=${JSON.stringify(events.slice(0, 3)).slice(0, 800)}
+
+`
+          );
+        } catch {
+        }
+        return;
+      }
     }
-    const events = this.buffer.splice(0, MAX_EVENTS_PER_WRITE);
-    if (events.length === 0) return;
-    this.flushing = this.client.update(this.ref, events).catch((err) => {
-      this.disabled = true;
-      this.degradedReason = err instanceof Error ? err.message : String(err);
-      log.warn("cot", "update-failed", { err: this.degradedReason });
-    }).finally(() => {
-      this.flushing = void 0;
-      if (this.buffer.length > 0 && !this.disabled) void this.flush();
-    });
-    await this.flushing;
   }
 };
 function finalAnswerOnlyState(state) {
