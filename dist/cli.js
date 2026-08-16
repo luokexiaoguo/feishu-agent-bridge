@@ -13772,6 +13772,7 @@ var ENDPOINTS2 = {
 var COT_UPDATE_THROTTLE_MS = 600;
 var COT_TOOL_OUTPUT_MAX = 1200;
 var COT_TEXT_MAX = 1200;
+var MAX_EVENTS_PER_WRITE = 50;
 var COT_REQUEST_TIMEOUT_MS = 15e3;
 var CotClient = class {
   baseUrl;
@@ -13958,7 +13959,7 @@ var CotPublisher = class {
       if (this.buffer.length > 0 && !this.disabled) await this.flush();
       return;
     }
-    const events = this.buffer.splice(0);
+    const events = this.buffer.splice(0, MAX_EVENTS_PER_WRITE);
     if (events.length === 0) return;
     this.flushing = this.client.update(this.ref, events).catch((err) => {
       this.disabled = true;
@@ -13966,7 +13967,7 @@ var CotPublisher = class {
       log.warn("cot", "update-failed", { err: this.degradedReason });
     }).finally(() => {
       this.flushing = void 0;
-      if (this.buffer.length > 0 && !this.disabled) this.scheduleFlush();
+      if (this.buffer.length > 0 && !this.disabled) void this.flush();
     });
     await this.flushing;
   }

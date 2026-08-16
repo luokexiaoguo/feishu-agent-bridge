@@ -12,6 +12,8 @@ const ENDPOINTS: Record<TenantBrand, string> = {
 const COT_UPDATE_THROTTLE_MS = 600;
 const COT_TOOL_OUTPUT_MAX = 1200;
 const COT_TEXT_MAX = 1200;
+/** message_cot caps events per write call at 50 (probed: 50 ok, 51 → 400). */
+const MAX_EVENTS_PER_WRITE = 50;
 // Bounds every CoT HTTP call. Without it a hung message_cot endpoint pins
 // start() — which runs before any agent event is drained and before the
 // plain-reply fallback — to undici's ~300s default.
@@ -254,7 +256,12 @@ export class CotPublisher {
       if (this.buffer.length > 0 && !this.disabled) await this.flush();
       return;
     }
-    const events = this.buffer.splice(0);
+    // FIX(fork): the message_cot API caps events per write at 50 — a larger
+    // batch fails with 400 99992402 "field validation failed". Token-level
+    // streams (hermes agent_thought_chunk) pile up far more than 50 within
+    // one 600ms flush window. Split into ≤50-event writes and keep sending
+    // until the buffer drains (no extra throttle delay between splits).
+    const events = this.buffer.splice(0, MAX_EVENTS_PER_WRITE);
     if (events.length === 0) return;
     this.flushing = this.client.update(this.ref, events)
       .catch((err) => {
@@ -264,7 +271,7 @@ export class CotPublisher {
       })
       .finally(() => {
         this.flushing = undefined;
-        if (this.buffer.length > 0 && !this.disabled) this.scheduleFlush();
+        if (this.buffer.length > 0 && !this.disabled) void this.flush();
       });
     await this.flushing;
   }
