@@ -39,7 +39,7 @@
 }
 ```
 
-- 权限模型走 `"permissions"`（含 `"defaultAccess"` 与 `"maxAccess"` 双档），替代旧版 `sandbox` 配置。
+- 权限模型走 `"permissions"`（含 `"defaultAccess"` 与 `"maxAccess"` 双档），替代已废弃的旧版 `sandbox`（legacy `sandbox`）配置。
 - 多机器人共存时，每个 profile 使用独立的 lark-cli 身份策略；当前 profile 的 lark-cli 目录彼此隔离。
 - 云文档评论按文档权限生效，与群 / 单聊访问控制相互独立。
 
