@@ -132,7 +132,11 @@ interface CotRef {
 interface CotEvent {
   event_type: string;
   content: string;
-  timestamp: number;
+  // FIX(fork): the message_cot API expects timestamps as STRINGS (dsh-lark
+  // sends `String(lastTimestamp)`). Numeric timestamps were accepted by the
+  // write API but the Feishu client failed to render subsequent events —
+  // the bubble stuck on "理解用户问题".
+  timestamp: string;
 }
 
 export class CotPublisher {
@@ -223,11 +227,11 @@ export class CotPublisher {
     this.scheduleFlush();
   }
 
-  private nextTimestamp(): number {
+  private nextTimestamp(): string {
     const now = Date.now();
     const ts = now > this.lastTimestamp ? now : this.lastTimestamp + 1;
     this.lastTimestamp = ts;
-    return ts;
+    return String(ts);
   }
 
   async finish(reason: string): Promise<void> {
@@ -385,8 +389,11 @@ export async function consumeCotEvents(
           messageId: `tool-result-${evt.id}`,
           toolCallId: evt.id,
           role: 'tool',
+          // FIX(fork): structured code-block content like dsh-lark's
+          // renderer ({type:'code', code}) — a bare string content did not
+          // render as a tool result in the Feishu client.
           content: detailed
-            ? truncateCot(evt.output ?? '', COT_TOOL_OUTPUT_MAX)
+            ? { type: 'code', code: truncateCot(evt.output ?? '', COT_TOOL_OUTPUT_MAX) }
             : brief
               ? cotBriefToolTitle(brief.name, brief.input, evt.isError ? 'error' : 'done')
               : '工具调用已完成',

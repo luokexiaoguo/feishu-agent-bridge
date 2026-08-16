@@ -13933,7 +13933,7 @@ var CotPublisher = class {
     const now = Date.now();
     const ts = now > this.lastTimestamp ? now : this.lastTimestamp + 1;
     this.lastTimestamp = ts;
-    return ts;
+    return String(ts);
   }
   async finish(reason) {
     if (this.timer) {
@@ -14062,7 +14062,10 @@ async function consumeCotEvents(events, publisher, opts) {
           messageId: `tool-result-${evt.id}`,
           toolCallId: evt.id,
           role: "tool",
-          content: detailed ? truncateCot(evt.output ?? "", COT_TOOL_OUTPUT_MAX) : brief ? cotBriefToolTitle(brief.name, brief.input, evt.isError ? "error" : "done") : "\u5DE5\u5177\u8C03\u7528\u5DF2\u5B8C\u6210"
+          // FIX(fork): structured code-block content like dsh-lark's
+          // renderer ({type:'code', code}) — a bare string content did not
+          // render as a tool result in the Feishu client.
+          content: detailed ? { type: "code", code: truncateCot(evt.output ?? "", COT_TOOL_OUTPUT_MAX) } : brief ? cotBriefToolTitle(brief.name, brief.input, evt.isError ? "error" : "done") : "\u5DE5\u5177\u8C03\u7528\u5DF2\u5B8C\u6210"
         });
         toolBrief.delete(evt.id);
         continue;

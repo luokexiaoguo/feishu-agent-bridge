@@ -62,7 +62,8 @@ describe('COT event mapping', () => {
 
     expect(client.events.map((event) => event.event_type)).toContain('TOOL_CALL_ARGS');
     const result = client.events.find((event) => event.event_type === 'TOOL_CALL_RESULT');
-    expect(JSON.parse(result?.content ?? '{}').content).toBe('workspace');
+    // detailed mode renders tool output as a structured code block
+    expect(JSON.parse(result?.content ?? '{}').content).toEqual({ type: 'code', code: 'workspace' });
   });
 
   it('derives final answer state from text blocks only', () => {
@@ -188,7 +189,7 @@ describe('COT event mapping', () => {
 });
 
 class FakeCotClient {
-  events: Array<{ event_type: string; content: string; timestamp: number }> = [];
+  events: Array<{ event_type: string; content: string; timestamp: string }> = [];
   completed: string[] = [];
   createCalls: Array<{ chatId: string; originMessageId?: string }> = [];
   failUpdate: Error | undefined;
@@ -201,11 +202,10 @@ class FakeCotClient {
     return this.createResult ?? { cot_id: 'cot_fake', message_id: 'om_cot_fake' };
   }
 
-  async update(_ref: unknown, events: readonly { event_type: string; content: string; timestamp: number }[]): Promise<void> {
+  async update(_ref: unknown, events: readonly { event_type: string; content: string; timestamp: string }[]): Promise<void> {
     if (this.failUpdate) throw this.failUpdate;
     this.events.push(...events);
   }
-
   async complete(_ref: unknown, reason: string): Promise<void> {
     this.completed.push(reason);
   }
