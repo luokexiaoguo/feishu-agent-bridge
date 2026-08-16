@@ -30,7 +30,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Test
-        run: pnpm test
+        # Unit tests only — the integration suite needs a live Lark channel /
+        # real agent CLIs and cannot run in CI. (`pnpm test` runs everything
+        # and would fail here on purpose.)
+        run: pnpm test:unit
 
       - name: Typecheck
         run: pnpm typecheck
