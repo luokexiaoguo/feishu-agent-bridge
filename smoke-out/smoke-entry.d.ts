@@ -166,6 +166,4 @@ declare class HermesAdapter implements AgentAdapter {
     run(opts: AgentRunOptions): AgentRun;
 }
 
-declare function prefixBridgeSystemPrompt(prompt: string, identity: AgentBotIdentity | undefined): string;
-
-export { HermesAdapter, prefixBridgeSystemPrompt };
+export { HermesAdapter };

@@ -13916,7 +13916,10 @@ var CotPublisher = class _CotPublisher {
     log.info("cot", "created", { cotId, messageId });
     this.enqueue("RUN_STARTED", {
       threadId: this.scope,
-      runId: this.runId
+      // dsh-lark parity: runId is a plain "turn-<n>" — a UUID here could be
+      // rejected by the client's run matcher (the client only renders events
+      // belonging to a run it recognizes).
+      runId: `turn-${this.runSeq}`
     });
   }
   enqueue(eventType, content) {
@@ -14031,14 +14034,13 @@ async function consumeCotEvents(events, publisher, opts) {
         closeTextIfNeeded();
         const toolCallId = evt.id;
         const detailed = opts.detail === "detailed";
-        const showSummary = opts.detail === "brief" || detailed;
-        const title = showSummary ? cotBriefToolTitle(evt.name, evt.input, "running") : "\u6B63\u5728\u8C03\u7528\u5DE5\u5177";
+        const title = detailed ? evt.name : evt.name;
         toolBrief.set(toolCallId, { name: evt.name, input: evt.input });
         publisher.enqueue("TOOL_CALL_START", {
           toolCallId,
-          icon: showSummary ? cotToolIcon(evt.name) : "default",
+          icon: cotToolIcon(evt.name),
           title,
-          toolCallName: showSummary ? evt.name : "tool"
+          toolCallName: evt.name
         });
         if (detailed && evt.input !== void 0) {
           publisher.enqueue("TOOL_CALL_ARGS", {
@@ -14086,16 +14088,15 @@ async function consumeCotEvents(events, publisher, opts) {
         closeReasoningIfNeeded();
         closeTextIfNeeded();
         if (evt.type === "error") {
-          publisher.enqueue("RUN_ERROR", { message: evt.message, code: evt.terminationReason ?? "error" });
+          publisher.enqueue("RUN_ERROR", { message: evt.message, code: "TURN_FAILED" });
           await publisher.finish("error");
         } else {
-          const status = evt.terminationReason === "normal" ? "done" : evt.terminationReason ?? "done";
           publisher.enqueue("RUN_FINISHED", {
             threadId: publisher.scope,
-            runId: publisher.runId,
-            status
+            runId: `turn-${publisher.runSeq}`,
+            status: "done"
           });
-          await publisher.finish(status === "done" ? "done" : "error");
+          await publisher.finish("done");
         }
         return;
       }

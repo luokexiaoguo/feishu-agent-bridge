@@ -990,6 +990,7 @@ async function* createEventStream(ctx) {
   let sessionId;
   let finalText = "";
   let terminalEmitted = false;
+  const diag = { thinking: 0, toolUse: 0, toolResult: 0 };
   const emitError = (message) => ({
     type: "error",
     message,
@@ -1021,9 +1022,13 @@ async function* createEventStream(ctx) {
           finalText += ev.delta;
           continue;
         }
+        if (ev.type === "thinking") diag.thinking++;
+        if (ev.type === "tool_use") diag.toolUse++;
+        if (ev.type === "tool_result") diag.toolResult++;
         yield ev;
       }
     }
+    log.info("agent", "hermes-events", { sessionId, thinking: diag.thinking, toolUse: diag.toolUse, toolResult: diag.toolResult });
   } catch (err) {
     if (ctx.getStopReason()) {
       yield { type: "done", sessionId, terminationReason: "interrupted" };
@@ -1109,6 +1114,5 @@ function translateUpdate(update) {
   return events;
 }
 export {
-  HermesAdapter,
-  prefixBridgeSystemPrompt
+  HermesAdapter
 };

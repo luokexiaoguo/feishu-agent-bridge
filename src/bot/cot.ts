@@ -217,7 +217,10 @@ export class CotPublisher {
     // step header and then failed to render any subsequent events.
     this.enqueue('RUN_STARTED', {
       threadId: this.scope,
-      runId: this.runId,
+      // dsh-lark parity: runId is a plain "turn-<n>" — a UUID here could be
+      // rejected by the client's run matcher (the client only renders events
+      // belonging to a run it recognizes).
+      runId: `turn-${this.runSeq}`,
     });
   }
 
@@ -371,14 +374,16 @@ export async function consumeCotEvents(
         closeTextIfNeeded();
         const toolCallId = evt.id;
         const detailed = opts.detail === 'detailed';
-        const showSummary = opts.detail === 'brief' || detailed;
-        const title = showSummary ? cotBriefToolTitle(evt.name, evt.input, 'running') : '正在调用工具';
+        // dsh-lark parity: title is a plain display label (no emoji /
+        // markdown / status icons) — toolHeaderText's "⏳ **name** — …"
+        // shape was not rendered by the client's tool header.
+        const title = detailed ? evt.name : evt.name;
         toolBrief.set(toolCallId, { name: evt.name, input: evt.input });
         publisher.enqueue('TOOL_CALL_START', {
           toolCallId,
-          icon: showSummary ? cotToolIcon(evt.name) : 'default',
+          icon: cotToolIcon(evt.name),
           title,
-          toolCallName: showSummary ? evt.name : 'tool',
+          toolCallName: evt.name,
         });
         if (detailed && evt.input !== undefined) {
           publisher.enqueue('TOOL_CALL_ARGS', {
@@ -432,16 +437,17 @@ export async function consumeCotEvents(
         closeReasoningIfNeeded();
         closeTextIfNeeded();
         if (evt.type === 'error') {
-          publisher.enqueue('RUN_ERROR', { message: evt.message, code: evt.terminationReason ?? 'error' });
+          // dsh-lark parity: RUN_ERROR code is the constant 'TURN_FAILED'.
+          publisher.enqueue('RUN_ERROR', { message: evt.message, code: 'TURN_FAILED' });
           await publisher.finish('error');
         } else {
-          const status = evt.terminationReason === 'normal' ? 'done' : evt.terminationReason ?? 'done';
+          // dsh-lark parity: RUN_FINISHED status is always 'done'.
           publisher.enqueue('RUN_FINISHED', {
             threadId: publisher.scope,
-            runId: publisher.runId,
-            status,
+            runId: `turn-${publisher.runSeq}`,
+            status: 'done',
           });
-          await publisher.finish(status === 'done' ? 'done' : 'error');
+          await publisher.finish('done');
         }
         return;
       }
