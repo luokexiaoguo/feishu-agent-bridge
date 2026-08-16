@@ -26,6 +26,12 @@
 - 修复：冲突时若 holder pid 已不存在（`isAlive` 为 false），自动清理 stale 锁文件 + meta 文件后重试，不再报错。
 - 文件：`src/cli/commands/start.ts`。
 
+### 5. cot 思考气泡更新失败（HTTP 400，气泡中断 + 残留半截消息）
+- 现象：`message_cot` 创建成功，但更新时 `COT HTTP 400` → 思考气泡停止 + 发送"更新失败"降级通知，且留下一条流式残留消息（2026-08-17 用户实测截图确认）。
+- 根因：`TOOL_CALL_ARGS` 事件把 `JSON.stringify(evt.input)` **原样**写入（工具参数一大，如读文件 / 目录列表），单事件 content 超过 message_cot 的 **4096 字符上限** → API 400。
+- 修复：`TOOL_CALL_ARGS` 的 delta 用 `truncateCot(..., COT_TOOL_OUTPUT_MAX)` 截断（1200）；同时 `CotClient.request` 在非 2xx 时**输出 API 错误 body**（原只抛 "COT HTTP 400"，无法诊断）。
+- 文件：`src/bot/cot.ts`。
+
 ## 配置项（均为可选，向后兼容）
 
 ```jsonc

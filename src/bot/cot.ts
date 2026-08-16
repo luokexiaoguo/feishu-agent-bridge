@@ -61,7 +61,13 @@ export class CotClient {
         ...(init.headers ?? {}),
       },
     });
-    if (!resp.ok) throw new Error(`COT HTTP ${resp.status}`);
+    if (!resp.ok) {
+      // FIX(fork): surface the API's own error body on non-2xx — a bare
+      // "COT HTTP 400" left the root cause invisible in the logs.
+      const bodyText = await resp.text().catch(() => '');
+      const detail = bodyText.slice(0, 300);
+      throw new Error(`COT HTTP ${resp.status}${detail ? `: ${detail}` : ''}`);
+    }
     const text = await resp.text();
     if (!text) return {};
     const data = JSON.parse(text) as { code?: number; msg?: string; data?: Record<string, unknown> } & Record<string, unknown>;
@@ -310,7 +316,11 @@ export async function consumeCotEvents(
         if (detailed && evt.input !== undefined) {
           publisher.enqueue('TOOL_CALL_ARGS', {
             toolCallId,
-            delta: JSON.stringify(evt.input),
+            // FIX(fork): the message_cot API caps one event's content at
+            // 4096 chars — a large tool input (file read, directory tree,
+            // command output) exceeded it and the update failed with HTTP
+            // 400, killing the whole thinking bubble mid-reply.
+            delta: truncateCot(JSON.stringify(evt.input), COT_TOOL_OUTPUT_MAX),
           });
         }
         publisher.enqueue('TOOL_CALL_END', { toolCallId });
