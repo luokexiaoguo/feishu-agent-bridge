@@ -5,7 +5,7 @@
 
 **[中文](README.md)** | **[English](README_EN.md)**
 
-**Feishu Agent Bridge** bridges your local CLI coding agents (Claude Code / MiMo Code) into Feishu / Lark — safely and reliably. Built on WebSocket long connections, it fixes the "long replies get killed" family of bugs from the original lark-channel-bridge, and renders replies as Feishu's **native thinking-process bubbles (message_cot)** — collapsible reasoning that streams in live, with the final answer sent separately, matching the dsh-lark bot experience.
+**Feishu Agent Bridge** bridges your local CLI coding agents (Claude Code / MiMo Code / OpenCode) into Feishu / Lark — safely and reliably. Built on WebSocket long connections, it fixes the "long replies get killed" family of bugs from the original lark-channel-bridge, and renders replies as Feishu's **native thinking-process bubbles (message_cot)** — collapsible reasoning that streams in live, with the final answer sent separately, matching the dsh-lark bot experience.
 
 ## ✨ Features
 
@@ -26,7 +26,7 @@
 ### Prerequisites
 
 - Node.js **>= 20.12** (22+ recommended)
-- At least one logged-in local agent: `claude` (Claude Code) or `mimo` (MiMo Code)
+- At least one logged-in local agent: `claude` (Claude Code), `mimo` (MiMo Code), or `opencode` (OpenCode)
 
 ### Install
 
@@ -102,6 +102,14 @@ Config lives in `~/.lark-channel/config.json`:
         "binaryPath": "/path/to/mimo",
         "thinking": true,              // forward --thinking so reasoning shows
         "idleSeconds": 180             // silence threshold before finishing (0 = disable)
+      },
+      "preferences": { "cotMessages": "on" }
+    },
+    "opencode": {
+      "agentKind": "opencode",
+      "opencode": {
+        "binaryPath": "/path/to/opencode",
+        "thinking": true
       },
       "preferences": { "cotMessages": "on" }
     }

@@ -1,6 +1,7 @@
 import { ClaudeAdapter } from '../agent/claude/adapter';
 import { CodexAdapter } from '../agent/codex/adapter';
 import { MimoAdapter } from '../agent/mimo/adapter';
+import { OpencodeAdapter } from '../agent/opencode/adapter';
 import { AgentPreflightError, type AgentAvailability } from '../agent/preflight';
 import type { AgentAdapter } from '../agent/types';
 import type { AppPaths } from '../config/app-paths';
@@ -64,6 +65,17 @@ export function createRuntimeAgent(
       larkChannel,
     });
   }
+  if (profileConfig.agentKind === 'opencode') {
+    const opencode = profileConfig.opencode;
+    if (!opencode?.binaryPath) {
+      throw new Error('opencode profile requires opencode.binaryPath');
+    }
+    return new OpencodeAdapter({
+      binary: opencode.binaryPath,
+      thinking: opencode.thinking === true,
+      larkChannel,
+    });
+  }
   return new ClaudeAdapter({ larkChannel });
 }
 
@@ -73,9 +85,9 @@ export async function checkRuntimeAgentAvailability(agent: AgentAdapter): Promis
   if (ok) return { ok: true };
   const diagnostic = {
     code: 'agent-binary-not-found' as const,
-    agentId: agent.id === 'codex' ? ('codex' as const) : agent.id === 'mimo' ? ('mimo' as const) : ('claude' as const),
+    agentId: agent.id === 'codex' ? ('codex' as const) : agent.id === 'mimo' ? ('mimo' as const) : agent.id === 'opencode' ? ('opencode' as const) : ('claude' as const),
     agentName: agent.displayName,
-    command: agent.id === 'codex' ? 'codex' : agent.id === 'mimo' ? 'mimo' : 'claude',
+    command: agent.id === 'codex' ? 'codex' : agent.id === 'mimo' ? 'mimo' : agent.id === 'opencode' ? 'opencode' : 'claude',
   };
   return { ok: false, diagnostic, error: new AgentPreflightError(diagnostic) };
 }

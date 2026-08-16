@@ -9,7 +9,7 @@
 
 ## 快速了解
 
-将本地的 Claude Code / MiMo Code 等命令行 Agent 安全、稳定地接入飞书 / Lark。
+将本地的 Claude Code / MiMo Code / OpenCode 等命令行 Agent 安全、稳定地接入飞书 / Lark。
 本仓库是 lark-channel-bridge v0.7.0 的稳定化改造版：修复"长回复容易中断"的系列缺陷，
 回复样式切换为飞书**原生思考过程气泡（message_cot）**——推理可折叠展开、流式刷入，最终答案单独发出。
 
@@ -33,6 +33,14 @@
     "mimo": {
       "agentKind": "mimo",
       "mimo": { "binaryPath": "/path/to/mimo", "thinking": true, "idleSeconds": 180 },
+      "preferences": { "cotMessages": "on" }
+    },
+    "opencode": {
+      "agentKind": "opencode",
+      "opencode": {
+        "binaryPath": "/path/to/opencode",
+        "thinking": true
+      },
       "preferences": { "cotMessages": "on" }
     }
   }

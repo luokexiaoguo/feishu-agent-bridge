@@ -5,7 +5,7 @@
 
 **[中文](README.md)** | **[English](README_EN.md)**
 
-**Feishu Agent Bridge** 是一款将本地 CLI Agent（Claude Code / MiMo Code）安全、稳定地接入飞书 / Lark 的桥接工具。它基于 WebSocket 长连接，修复了原版 lark-channel-bridge 中"长回复容易中断"的缺陷，并把回复渲染为飞书**原生思考过程气泡（message_cot）**——推理可折叠展开、流式刷入，最终答案单独发出，与 dsh-lark 机器人的体验一致。
+**Feishu Agent Bridge** 是一款将本地 CLI Agent（Claude Code / MiMo Code / OpenCode）安全、稳定地接入飞书 / Lark 的桥接工具。它基于 WebSocket 长连接，修复了原版 lark-channel-bridge 中"长回复容易中断"的缺陷，并把回复渲染为飞书**原生思考过程气泡（message_cot）**——推理可折叠展开、流式刷入，最终答案单独发出，与 dsh-lark 机器人的体验一致。
 
 ## ✨ 功能特性
 
@@ -26,7 +26,7 @@
 ### 前提
 
 - Node.js **>= 20.12**（推荐 22+）
-- 至少一个已登录的本地 Agent：`claude`（Claude Code）或 `mimo`（MiMo Code）
+- 至少一个已登录的本地 Agent：`claude`（Claude Code）、`mimo`（MiMo Code）或 `opencode`（OpenCode）
 
 ### 安装
 
@@ -102,6 +102,14 @@ pnpm build         # 构建 dist（= pnpm build:web && tsup）
         "binaryPath": "/path/to/mimo",
         "thinking": true,              // 转发 --thinking，让推理进入思考区
         "idleSeconds": 180             // 静默收尾阈值（秒，0 = 禁用）
+      },
+      "preferences": { "cotMessages": "on" }
+    },
+    "opencode": {
+      "agentKind": "opencode",
+      "opencode": {
+        "binaryPath": "/path/to/opencode",
+        "thinking": true
       },
       "preferences": { "cotMessages": "on" }
     }

@@ -13,7 +13,7 @@ import {
   type PermissionSource,
 } from './permissions';
 
-export type AgentKind = 'claude' | 'codex' | 'mimo';
+export type AgentKind = 'claude' | 'codex' | 'mimo' | 'opencode';
 export type SandboxMode = CodexSandboxMode;
 export type { AccessMode, PermissionConfig, PermissionSource };
 
@@ -68,6 +68,17 @@ export interface MimoConfig {
    * Default 180 (3 min). Set 0 to disable the idle-finish entirely.
    */
   idleSeconds?: number;
+}
+
+export interface OpencodeConfig {
+  binaryPath: string;
+  realpath?: string;
+  version?: string;
+  sha256?: string;
+  owner?: number;
+  mode?: number;
+  /** Forward `--thinking` so reasoning events appear in the JSONL stream. */
+  thinking?: boolean;
 }
 
 export interface AttachmentConfig {
@@ -180,6 +191,7 @@ export interface ProfileConfig {
   permissionSource?: PermissionSource;
   codex?: CodexConfig;
   mimo?: MimoConfig;
+  opencode?: OpencodeConfig;
   attachments: AttachmentConfig;
   comments: CommentConfig;
   /** In-meeting agent settings. See {@link MeetingConfig}. */
@@ -225,6 +237,7 @@ export interface CreateDefaultProfileConfigInput {
   permissions?: Partial<PermissionConfig>;
   codex?: CodexConfig;
   mimo?: MimoConfig;
+  opencode?: OpencodeConfig;
   secrets?: SecretsConfig;
 }
 
@@ -261,6 +274,7 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
     permissions?: Partial<PermissionConfig>;
     codex?: CodexConfig & { flags?: unknown };
     mimo?: MimoConfig;
+    opencode?: OpencodeConfig;
     attachments?: Partial<AttachmentConfig>;
     comments?: unknown;
     meeting?: unknown;
@@ -270,8 +284,8 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
   if (raw.schemaVersion !== 2) {
     throw new Error('profile schemaVersion must be 2');
   }
-  if (raw.agentKind !== 'claude' && raw.agentKind !== 'codex' && raw.agentKind !== 'mimo') {
-    throw new Error('agentKind must be claude, codex, or mimo');
+  if (raw.agentKind !== 'claude' && raw.agentKind !== 'codex' && raw.agentKind !== 'mimo' && raw.agentKind !== 'opencode') {
+    throw new Error('agentKind must be claude, codex, mimo, or opencode');
   }
   const accounts = normalizeAccounts(raw.accounts);
   if (raw.agentKind === 'codex' && !raw.codex) {
@@ -279,6 +293,9 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
   }
   if (raw.agentKind === 'mimo' && !raw.mimo) {
     throw new Error('mimo profile requires mimo configuration');
+  }
+  if (raw.agentKind === 'opencode' && !raw.opencode) {
+    throw new Error('opencode profile requires opencode configuration');
   }
 
   const preferences = normalizePreferences(raw.preferences);
@@ -310,6 +327,7 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
     permissionSource,
     ...(raw.codex ? { codex: normalizeCodex(raw.codex) } : {}),
     ...(raw.mimo ? { mimo: normalizeMimo(raw.mimo) } : {}),
+    ...(raw.opencode ? { opencode: normalizeOpencode(raw.opencode) } : {}),
     attachments: {
       maxCount: numberOr(raw.attachments?.maxCount, 10),
       maxBytes: numberOr(raw.attachments?.maxBytes, 100 * 1024 * 1024),
@@ -431,6 +449,19 @@ function normalizeMimo(input: MimoConfig): MimoConfig {
       : {}),
   };
   return mimo;
+}
+
+function normalizeOpencode(input: OpencodeConfig): OpencodeConfig {
+  const opencode: OpencodeConfig = {
+    binaryPath: input.binaryPath,
+    ...(typeof input.realpath === 'string' ? { realpath: input.realpath } : {}),
+    ...(typeof input.version === 'string' ? { version: input.version } : {}),
+    ...(typeof input.sha256 === 'string' ? { sha256: input.sha256 } : {}),
+    ...(typeof input.owner === 'number' ? { owner: input.owner } : {}),
+    ...(typeof input.mode === 'number' ? { mode: input.mode } : {}),
+    thinking: input.thinking === true,
+  };
+  return opencode;
 }
 
 function normalizeComments(_input: unknown): CommentConfig {

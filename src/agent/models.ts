@@ -53,10 +53,17 @@ const MIMO_MODELS: ModelOption[] = [
   { value: 'mimo-auto', label: 'MiMo Auto（自动路由）' },
 ];
 
+/** OpenCode models. Forwarded to `opencode run --model`. */
+const OPENCODE_MODELS: ModelOption[] = [
+  { value: DEFAULT_MODEL, label: '跟随默认（不指定）' },
+  { value: 'opencode/zen', label: 'opencode zen（默认网关）' },
+];
+
 /** The model picker options for a profile's agent kind. */
 export function supportedModels(agentKind: AgentKind): ModelOption[] {
   if (agentKind === 'codex') return CODEX_MODELS;
   if (agentKind === 'mimo') return MIMO_MODELS;
+  if (agentKind === 'opencode') return OPENCODE_MODELS;
   return CLAUDE_MODELS;
 }
 

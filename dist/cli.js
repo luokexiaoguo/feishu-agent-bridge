@@ -351,7 +351,7 @@ function getAgentPreflightDiagnostic(err) {
 function isAgentPreflightDiagnostic(input) {
   if (!input || typeof input !== "object") return false;
   const raw = input;
-  return typeof raw.code === "string" && raw.code.startsWith("agent-") && (raw.agentId === "claude" || raw.agentId === "codex" || raw.agentId === "mimo") && typeof raw.agentName === "string" && typeof raw.command === "string";
+  return typeof raw.code === "string" && raw.code.startsWith("agent-") && (raw.agentId === "claude" || raw.agentId === "codex" || raw.agentId === "mimo" || raw.agentId === "opencode") && typeof raw.agentName === "string" && typeof raw.command === "string";
 }
 function codeForSpawnError(err) {
   if (err.code === "ENOENT") return "agent-binary-not-found";
@@ -581,8 +581,8 @@ function normalizeProfileConfig(input) {
   if (raw.schemaVersion !== 2) {
     throw new Error("profile schemaVersion must be 2");
   }
-  if (raw.agentKind !== "claude" && raw.agentKind !== "codex" && raw.agentKind !== "mimo") {
-    throw new Error("agentKind must be claude, codex, or mimo");
+  if (raw.agentKind !== "claude" && raw.agentKind !== "codex" && raw.agentKind !== "mimo" && raw.agentKind !== "opencode") {
+    throw new Error("agentKind must be claude, codex, mimo, or opencode");
   }
   const accounts = normalizeAccounts(raw.accounts);
   if (raw.agentKind === "codex" && !raw.codex) {
@@ -590,6 +590,9 @@ function normalizeProfileConfig(input) {
   }
   if (raw.agentKind === "mimo" && !raw.mimo) {
     throw new Error("mimo profile requires mimo configuration");
+  }
+  if (raw.agentKind === "opencode" && !raw.opencode) {
+    throw new Error("opencode profile requires opencode configuration");
   }
   const preferences = normalizePreferences(raw.preferences);
   const access3 = normalizeAccess(
@@ -619,6 +622,7 @@ function normalizeProfileConfig(input) {
     permissionSource,
     ...raw.codex ? { codex: normalizeCodex(raw.codex) } : {},
     ...raw.mimo ? { mimo: normalizeMimo(raw.mimo) } : {},
+    ...raw.opencode ? { opencode: normalizeOpencode(raw.opencode) } : {},
     attachments: {
       maxCount: numberOr(raw.attachments?.maxCount, 10),
       maxBytes: numberOr(raw.attachments?.maxBytes, 100 * 1024 * 1024),
@@ -717,6 +721,18 @@ function normalizeMimo(input) {
     ...typeof input.idleSeconds === "number" && Number.isFinite(input.idleSeconds) ? { idleSeconds: Math.max(0, Math.floor(input.idleSeconds)) } : {}
   };
   return mimo;
+}
+function normalizeOpencode(input) {
+  const opencode = {
+    binaryPath: input.binaryPath,
+    ...typeof input.realpath === "string" ? { realpath: input.realpath } : {},
+    ...typeof input.version === "string" ? { version: input.version } : {},
+    ...typeof input.sha256 === "string" ? { sha256: input.sha256 } : {},
+    ...typeof input.owner === "number" ? { owner: input.owner } : {},
+    ...typeof input.mode === "number" ? { mode: input.mode } : {},
+    thinking: input.thinking === true
+  };
+  return opencode;
 }
 function normalizeComments(_input) {
   return {};
@@ -1785,7 +1801,7 @@ async function acquireRuntimeLock(meta) {
 function isRuntimeLockMeta(value) {
   if (!value || typeof value !== "object") return false;
   const meta = value;
-  return (meta.kind === "profile" || meta.kind === "app") && typeof meta.target === "string" && typeof meta.profile === "string" && (meta.agentKind === "claude" || meta.agentKind === "codex" || meta.agentKind === "mimo") && typeof meta.pid === "number" && typeof meta.startedAt === "string" && (meta.appId === void 0 || typeof meta.appId === "string");
+  return (meta.kind === "profile" || meta.kind === "app") && typeof meta.target === "string" && typeof meta.profile === "string" && (meta.agentKind === "claude" || meta.agentKind === "codex" || meta.agentKind === "mimo" || meta.agentKind === "opencode") && typeof meta.pid === "number" && typeof meta.startedAt === "string" && (meta.appId === void 0 || typeof meta.appId === "string");
 }
 
 // src/runtime/registry.ts
@@ -1793,7 +1809,7 @@ var EMPTY = { entries: [] };
 function isValidEntry(e) {
   if (!e || typeof e !== "object") return false;
   const x = e;
-  return typeof x.id === "string" && typeof x.pid === "number" && typeof x.appId === "string" && (x.tenant === "feishu" || x.tenant === "lark") && typeof x.profileName === "string" && (x.agentKind === "claude" || x.agentKind === "codex" || x.agentKind === "mimo") && typeof x.configPath === "string" && typeof x.startedAt === "string" && typeof x.version === "string";
+  return typeof x.id === "string" && typeof x.pid === "number" && typeof x.appId === "string" && (x.tenant === "feishu" || x.tenant === "lark") && typeof x.profileName === "string" && (x.agentKind === "claude" || x.agentKind === "codex" || x.agentKind === "mimo" || x.agentKind === "opencode") && typeof x.configPath === "string" && typeof x.startedAt === "string" && typeof x.version === "string";
 }
 function isAlive(pid) {
   try {
@@ -5972,6 +5988,7 @@ async function maybeResolveProfileRuntime(profile2) {
 function agentDisplay(agentKind) {
   if (agentKind === "codex") return { id: "codex", displayName: "Codex CLI" };
   if (agentKind === "mimo") return { id: "mimo", displayName: "MiMo Code" };
+  if (agentKind === "opencode") return { id: "opencode", displayName: "OpenCode" };
   return { id: "claude", displayName: "Claude Code" };
 }
 
@@ -5979,7 +5996,7 @@ function agentDisplay(agentKind) {
 import dns from "dns";
 import os from "os";
 import { unlink as unlink2 } from "fs/promises";
-import { createInterface as createInterface8 } from "readline";
+import { createInterface as createInterface9 } from "readline";
 
 // src/agent/claude/adapter.ts
 import { mkdtempSync, rmSync, writeFileSync as writeFileSync2 } from "fs";
@@ -7029,6 +7046,23 @@ function mimoCapability(profile2) {
     }
   };
 }
+function opencodeCapability(profile2) {
+  const maxAccess = profile2.permissions.maxAccess;
+  return {
+    agentId: "opencode",
+    sessionKind: "opencode-session",
+    promptInjection: "stdin-prefix",
+    systemPrompt: BRIDGE_SYSTEM_PROMPT,
+    supportsNativeHistory: false,
+    callback: {
+      marker: "__bridge_cb",
+      legacyMarkers: []
+    },
+    permissions: {
+      maxAccess
+    }
+  };
+}
 
 // src/agent/models.ts
 var DEFAULT_MODEL = "default";
@@ -7051,9 +7085,14 @@ var MIMO_MODELS = [
   { value: DEFAULT_MODEL, label: "\u8DDF\u968F\u9ED8\u8BA4\uFF08\u4E0D\u6307\u5B9A\uFF09" },
   { value: "mimo-auto", label: "MiMo Auto\uFF08\u81EA\u52A8\u8DEF\u7531\uFF09" }
 ];
+var OPENCODE_MODELS = [
+  { value: DEFAULT_MODEL, label: "\u8DDF\u968F\u9ED8\u8BA4\uFF08\u4E0D\u6307\u5B9A\uFF09" },
+  { value: "opencode/zen", label: "opencode zen\uFF08\u9ED8\u8BA4\u7F51\u5173\uFF09" }
+];
 function supportedModels(agentKind) {
   if (agentKind === "codex") return CODEX_MODELS;
   if (agentKind === "mimo") return MIMO_MODELS;
+  if (agentKind === "opencode") return OPENCODE_MODELS;
   return CLAUDE_MODELS;
 }
 function isDefaultModel(value) {
@@ -9648,7 +9687,7 @@ async function startRunFlow(input) {
       cwdRealpath: workspace.cwdRealpath,
       policyFingerprint: policy.policyFingerprint
     });
-    if (catalogEntry?.agentId === "claude" || catalogEntry?.agentId === "mimo") {
+    if (catalogEntry?.agentId === "claude" || catalogEntry?.agentId === "mimo" || catalogEntry?.agentId === "opencode") {
       sessionId = catalogEntry.sessionId;
       resumeFrom = sessionId;
     } else if (catalogEntry?.agentId === "codex") {
@@ -9870,7 +9909,7 @@ function resolveSummaryTarget(preference, originChatId, botOwnerId) {
 async function runMeetingAgent(deps, prompt, usedPrefix) {
   const { session, controls } = deps;
   const scopeId = meetingScopeId(session.meetingId);
-  const capability = controls.profileConfig.agentKind === "codex" ? codexCapability(controls.profileConfig) : controls.profileConfig.agentKind === "mimo" ? mimoCapability(controls.profileConfig) : claudeCapability(controls.profileConfig);
+  const capability = controls.profileConfig.agentKind === "codex" ? codexCapability(controls.profileConfig) : controls.profileConfig.agentKind === "mimo" ? mimoCapability(controls.profileConfig) : controls.profileConfig.agentKind === "opencode" ? opencodeCapability(controls.profileConfig) : claudeCapability(controls.profileConfig);
   const result = await startRunFlow({
     scopeId,
     scope: {
@@ -10400,7 +10439,7 @@ function consumeResumeCandidate(nonce, identity) {
   const candidate = resumeCandidates.get(nonce);
   if (!candidate) return void 0;
   resumeCandidates.delete(nonce);
-  if (candidate.scopeId !== identity.scopeId || candidate.agentId !== identity.agentId || candidate.cwdRealpath !== identity.cwdRealpath || candidate.policyFingerprint !== identity.policyFingerprint || identity.agentId === "claude" && !candidate.sessionId || identity.agentId === "codex" && !candidate.threadId || identity.agentId === "mimo" && !candidate.sessionId) {
+  if (candidate.scopeId !== identity.scopeId || candidate.agentId !== identity.agentId || candidate.cwdRealpath !== identity.cwdRealpath || candidate.policyFingerprint !== identity.policyFingerprint || identity.agentId === "claude" && !candidate.sessionId || identity.agentId === "codex" && !candidate.threadId || identity.agentId === "mimo" && !candidate.sessionId || identity.agentId === "opencode" && !candidate.sessionId) {
     return void 0;
   }
   return candidate;
@@ -10740,7 +10779,7 @@ async function handleDoctor(args, ctx) {
     return;
   }
   doctorLastByOperator.set(rateKey, now);
-  const capability = ctx.controls.profileConfig.agentKind === "codex" ? codexCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "mimo" ? mimoCapability(ctx.controls.profileConfig) : claudeCapability(ctx.controls.profileConfig);
+  const capability = ctx.controls.profileConfig.agentKind === "codex" ? codexCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "mimo" ? mimoCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "opencode" ? opencodeCapability(ctx.controls.profileConfig) : claudeCapability(ctx.controls.profileConfig);
   const policy = evaluateRunPolicy({
     scope: {
       source: "im",
@@ -16325,7 +16364,7 @@ async function onboardValidate(body) {
 }
 async function onboardCreate(body, rootDir) {
   const fv = asRecord4(body);
-  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" ? fv.agentKind : "claude";
+  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" ? fv.agentKind : "claude";
   const input = {
     profile: String(fv.profile ?? "").trim() || agentKind,
     agentKind,
@@ -16464,7 +16503,7 @@ async function finishQrRegistration(body, rootDir) {
   if (s.status === "done" && s.profile) return { profile: s.profile };
   if (s.status === "error") throw new HttpError(400, s.error ?? "\u626B\u7801\u521B\u5EFA\u5931\u8D25");
   if (!s.app) throw new HttpError(409, "\u5C1A\u672A\u5B8C\u6210\u626B\u7801");
-  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" ? fv.agentKind : "claude";
+  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" ? fv.agentKind : "claude";
   const profile2 = String(fv.profile ?? "").trim() || s.suggestedProfile || agentKind;
   const created = await writeNewProfile(
     { profile: profile2, agentKind, appId: s.app.appId, appSecret: s.app.appSecret, tenant: s.app.tenant },
@@ -16956,7 +16995,7 @@ var SessionCatalog = class {
 function normalizeEntry(input) {
   if (!input || typeof input !== "object") return void 0;
   const raw = input;
-  if (typeof raw.key !== "string" || typeof raw.scopeId !== "string" || raw.agentId !== "claude" && raw.agentId !== "codex" && raw.agentId !== "mimo" || typeof raw.cwdRealpath !== "string" || typeof raw.policyFingerprint !== "string" || raw.status !== "active" && raw.status !== "archived" || typeof raw.updatedAt !== "number") {
+  if (typeof raw.key !== "string" || typeof raw.scopeId !== "string" || raw.agentId !== "claude" && raw.agentId !== "codex" && raw.agentId !== "mimo" && raw.agentId !== "opencode" || typeof raw.cwdRealpath !== "string" || typeof raw.policyFingerprint !== "string" || raw.status !== "active" && raw.status !== "archived" || typeof raw.updatedAt !== "number") {
     return void 0;
   }
   return {
@@ -17476,6 +17515,301 @@ function isWindowsCommandNotFoundLine3(line) {
   return process.platform === "win32" && /is not recognized as an internal or external command|operable program or batch file/i.test(line);
 }
 
+// src/agent/opencode/adapter.ts
+import { createInterface as createInterface8 } from "readline";
+
+// src/agent/opencode/argv.ts
+function buildOpencodeArgs(input) {
+  const args = ["run", "--format", "json"];
+  if (input.skipPermissions) args.push("--dangerously-skip-permissions");
+  if (input.thinking) args.push("--thinking");
+  if (input.model) args.push("--model", input.model);
+  if (input.sessionId) args.push("--session", input.sessionId);
+  args.push("--dir", input.cwd);
+  return args;
+}
+
+// src/agent/opencode/jsonl.ts
+function toNumber(v) {
+  return typeof v === "number" && Number.isFinite(v) ? v : void 0;
+}
+var OpencodeJsonlTranslator = class {
+  sessionId;
+  terminalEmitted = false;
+  translate(raw) {
+    if (!raw || typeof raw !== "object") return [];
+    const evt = raw;
+    const events = [];
+    if (typeof evt.sessionID === "string" && !this.sessionId) {
+      this.sessionId = evt.sessionID;
+      events.push({ type: "system", sessionId: evt.sessionID });
+    }
+    switch (evt.type) {
+      case "text": {
+        const text = evt.part?.text;
+        if (text) events.push({ type: "text", delta: text });
+        break;
+      }
+      case "reasoning": {
+        const text = evt.part?.text;
+        if (text) events.push({ type: "thinking", delta: text });
+        break;
+      }
+      case "tool_use": {
+        const part = evt.part;
+        if (part?.callID && part.tool) {
+          const isError = part.state?.status === "error";
+          const rawOutput = isError ? part.state?.error : part.state?.output;
+          const output = typeof rawOutput === "string" ? rawOutput : rawOutput === void 0 ? "" : JSON.stringify(rawOutput);
+          events.push({
+            type: "tool_use",
+            id: part.callID,
+            name: part.tool,
+            input: part.state?.input
+          });
+          events.push({ type: "tool_result", id: part.callID, output, isError });
+        }
+        break;
+      }
+      case "step_finish": {
+        const tokens = evt.part?.tokens;
+        if (tokens && typeof tokens === "object") {
+          events.push({
+            type: "usage",
+            inputTokens: toNumber(tokens.input),
+            outputTokens: toNumber(tokens.output),
+            costUsd: toNumber(tokens.cost)
+          });
+        }
+        break;
+      }
+      case "error": {
+        const message = evt.error?.data?.message ?? evt.error?.name ?? "opencode error";
+        events.push({ type: "error", message, terminationReason: "failed" });
+        this.terminalEmitted = true;
+        break;
+      }
+      default:
+        break;
+    }
+    return events;
+  }
+  terminalEmittedFlag() {
+    return this.terminalEmitted;
+  }
+  /**
+   * Emit the terminal `done` event. Called once stdout is exhausted (the CLI
+   * exited, which is opencode's only end signal). Returns nothing once a
+   * terminal event has already been emitted (e.g. `error`).
+   */
+  finish(reason = "normal") {
+    if (this.terminalEmitted) return [];
+    this.terminalEmitted = true;
+    return [{ type: "done", sessionId: this.sessionId, terminationReason: reason }];
+  }
+};
+
+// src/agent/opencode/adapter.ts
+var OpencodeAdapter = class {
+  id = "opencode";
+  displayName = "OpenCode";
+  binary;
+  larkChannel;
+  thinking;
+  defaultStopGraceMs;
+  botIdentity;
+  constructor(opts = {}) {
+    this.binary = opts.binary ?? "opencode";
+    this.larkChannel = opts.larkChannel;
+    this.thinking = opts.thinking === true;
+    this.defaultStopGraceMs = opts.stopGraceMs ?? 5e3;
+  }
+  setBotIdentity(identity) {
+    this.botIdentity = identity;
+  }
+  async isAvailable() {
+    return (await this.checkAvailability()).ok;
+  }
+  async checkAvailability() {
+    return checkAgentAvailability({
+      agentId: "opencode",
+      agentName: "OpenCode",
+      command: this.binary,
+      binaryPath: this.binary
+    });
+  }
+  run(opts) {
+    if (!opts.cwd) {
+      throw new Error("cwd is required for OpencodeAdapter.run");
+    }
+    const args = buildOpencodeArgs({
+      cwd: opts.cwd,
+      sessionId: opts.sessionId,
+      model: opts.model,
+      thinking: this.thinking,
+      skipPermissions: opts.sandbox === "danger-full-access"
+    });
+    args.push(prefixBridgeSystemPrompt(opts.prompt, this.botIdentity));
+    const child = spawnProcess(this.binary, args, {
+      cwd: opts.cwd,
+      env: mergeProcessEnv(process.env, buildLarkChannelEnv(this.larkChannel)),
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    log.info("agent", "spawn", {
+      pid: child.pid ?? null,
+      cwd: opts.cwd,
+      hasSession: Boolean(opts.sessionId),
+      promptChars: opts.prompt.length,
+      model: opts.model
+    });
+    const stderrChunks = [];
+    let runtimeError = null;
+    let stderrBuffer = "";
+    child.stderr.on("data", (chunk) => {
+      stderrChunks.push(chunk);
+      stderrBuffer += chunk.toString("utf8");
+      let nl = stderrBuffer.indexOf("\n");
+      while (nl !== -1) {
+        const line = stderrBuffer.slice(0, nl);
+        stderrBuffer = stderrBuffer.slice(nl + 1);
+        if (line.trim()) log.warn("agent", "stderr", { line });
+        if (isWindowsCommandNotFoundLine4(line)) {
+          runtimeError = new Error(`failed to spawn opencode: ${line.trim()}`);
+          child.stdout.destroy();
+          child.kill();
+        }
+        nl = stderrBuffer.indexOf("\n");
+      }
+    });
+    child.on("error", (err) => {
+      runtimeError = err;
+    });
+    child.on("exit", (code, signal) => {
+      log.info("agent", "exit", { pid: child.pid ?? null, code, signal });
+    });
+    child.stdin.on("error", (err) => {
+      log.warn("agent", "stdin-error", { message: err.message });
+    });
+    child.stdin.end();
+    const stopGraceMs = opts.stopGraceMs ?? this.defaultStopGraceMs;
+    let stopReason;
+    return {
+      runId: opts.runId,
+      events: createEventStream4(child, stderrChunks, () => runtimeError, () => stopReason),
+      async stop() {
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        stopReason = "interrupted";
+        log.info("agent", "stop-sigterm", { pid: child.pid ?? null, graceMs: stopGraceMs });
+        child.kill("SIGTERM");
+        await new Promise((resolve2) => {
+          const timer = setTimeout(() => {
+            if (child.exitCode === null && child.signalCode === null) {
+              log.warn("agent", "stop-sigkill", {
+                pid: child.pid ?? null,
+                graceMs: stopGraceMs,
+                reason: "grace-period-expired"
+              });
+              child.kill("SIGKILL");
+            }
+            resolve2();
+          }, stopGraceMs);
+          child.once("exit", () => {
+            clearTimeout(timer);
+            resolve2();
+          });
+        });
+      },
+      waitForExit(timeoutMs) {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          return Promise.resolve(true);
+        }
+        return new Promise((resolve2) => {
+          const onExit = () => {
+            clearTimeout(timer);
+            resolve2(true);
+          };
+          const timer = setTimeout(() => {
+            child.removeListener("exit", onExit);
+            resolve2(false);
+          }, timeoutMs);
+          child.once("exit", onExit);
+        });
+      }
+    };
+  }
+};
+async function* createEventStream4(child, stderrChunks, getError, getStopReason) {
+  if (!child.pid) {
+    const err = getError();
+    yield {
+      type: "error",
+      message: err ? `failed to spawn opencode: ${err.message}` : "spawn returned no pid",
+      terminationReason: "failed"
+    };
+    return;
+  }
+  const translator = new OpencodeJsonlTranslator();
+  const rl = createInterface8({ input: child.stdout, crlfDelay: Infinity });
+  try {
+    for await (const line of rl) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let parsed;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        continue;
+      }
+      yield* translator.translate(parsed);
+    }
+  } finally {
+    rl.close();
+  }
+  if (translator.terminalEmittedFlag()) return;
+  const earlyRuntimeError = getError();
+  if (earlyRuntimeError && child.exitCode === null && child.signalCode === null) {
+    yield* translator.finish("interrupted");
+    return;
+  }
+  const exitCode = await waitForExitCode3(child);
+  const stopReason = getStopReason();
+  if (stopReason) {
+    yield* translator.finish(stopReason);
+    return;
+  }
+  const runtimeError = getError();
+  if (exitCode !== 0 && exitCode !== null) {
+    const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
+    const detail = stderr ? `: ${stderr.slice(0, 500)}` : "";
+    yield {
+      type: "error",
+      message: `opencode exited with code ${exitCode}${detail}`,
+      terminationReason: "failed"
+    };
+    return;
+  }
+  if (runtimeError) {
+    yield {
+      type: "error",
+      message: `opencode runtime error: ${runtimeError.message}`,
+      terminationReason: "failed"
+    };
+    return;
+  }
+  yield* translator.finish("normal");
+}
+async function waitForExitCode3(child) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return child.exitCode;
+  }
+  return new Promise((resolve2) => {
+    child.once("exit", (code) => resolve2(code));
+  });
+}
+function isWindowsCommandNotFoundLine4(line) {
+  return process.platform === "win32" && /'(opencode)' is not recognized|'opencode' 不是内部或外部命令/i.test(line);
+}
+
 // src/runtime/agent-runtime.ts
 function createRuntimeAgent(profileConfig, appPaths2) {
   const larkChannelConfigPath = appPaths2.configPath ?? appPaths2.configFile;
@@ -17515,6 +17849,17 @@ function createRuntimeAgent(profileConfig, appPaths2) {
       larkChannel
     });
   }
+  if (profileConfig.agentKind === "opencode") {
+    const opencode = profileConfig.opencode;
+    if (!opencode?.binaryPath) {
+      throw new Error("opencode profile requires opencode.binaryPath");
+    }
+    return new OpencodeAdapter({
+      binary: opencode.binaryPath,
+      thinking: opencode.thinking === true,
+      larkChannel
+    });
+  }
   return new ClaudeAdapter({ larkChannel });
 }
 async function checkRuntimeAgentAvailability(agent) {
@@ -17523,9 +17868,9 @@ async function checkRuntimeAgentAvailability(agent) {
   if (ok) return { ok: true };
   const diagnostic = {
     code: "agent-binary-not-found",
-    agentId: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : "claude",
+    agentId: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : "claude",
     agentName: agent.displayName,
-    command: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : "claude"
+    command: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : "claude"
   };
   return { ok: false, diagnostic, error: new AgentPreflightError(diagnostic) };
 }
@@ -18045,7 +18390,7 @@ async function confirmStopRuntimeLockProcess2(err) {
       `\u5F53\u524D ${err.kind === "profile" ? "profile" : "app"} \u5DF2\u6709 bridge \u8FDB\u7A0B\u5360\u7528\uFF1B\u975E\u4EA4\u4E92\u6A21\u5F0F\u65E0\u6CD5\u786E\u8BA4\u505C\u6B62\uFF0C\u8BF7\u5148\u7528 \`feishu-agent-bridge ps\` \u67E5\u770B\u5E76\u7528 \`feishu-agent-bridge kill <bot id>\` \u505C\u6B62\u540E\u91CD\u8BD5`
     );
   }
-  const rl = createInterface8({ input: process.stdin, output: process.stdout });
+  const rl = createInterface9({ input: process.stdin, output: process.stdout });
   try {
     const answer = (await new Promise(
       (resolve2) => rl.question("\u662F\u5426\u505C\u6B62\u65E7\u8FDB\u7A0B\u5E76\u91CD\u65B0\u542F\u52A8? [y/N]: ", resolve2)
@@ -18109,17 +18454,17 @@ function openBrowser(url) {
 // src/cli/index.ts
 var program = new Command();
 program.name("feishu-agent-bridge").description("Bridge Feishu/Lark messenger with local CLI coding agents").version(package_default.version, "-v, --version");
-program.command("run").description("Run the bridge in the foreground (was `start` in older versions)").option("-c, --config <path>", "path to config file").option("--profile <name>", "profile name to run").option("--web-ui", "run the machine-wide supervisor + local web console (hosts all profiles); default is a single-profile headless run").option("--agent <kind>", "agent kind for a new profile (claude, codex, or mimo)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
+program.command("run").description("Run the bridge in the foreground (was `start` in older versions)").option("-c, --config <path>", "path to config file").option("--profile <name>", "profile name to run").option("--web-ui", "run the machine-wide supervisor + local web console (hosts all profiles); default is a single-profile headless run").option("--agent <kind>", "agent kind for a new profile (claude, codex, mimo, or opencode)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
   await runStart(opts);
 });
-program.command("migrate").description("Migrate legacy bridge config/state into the current profile layout").option("-c, --config <path>", "path to config file").option("--profile <name>", "target profile name for legacy v1 config migration").option("--agent <kind>", "agent kind for legacy v1 profile migration (claude, codex, or mimo)").action(async (opts) => {
+program.command("migrate").description("Migrate legacy bridge config/state into the current profile layout").option("-c, --config <path>", "path to config file").option("--profile <name>", "target profile name for legacy v1 config migration").option("--agent <kind>", "agent kind for legacy v1 profile migration (claude, codex, mimo, or opencode)").action(async (opts) => {
   await runMigrate(opts);
 });
 var profile = program.command("profile").description("Manage local bridge profiles");
 profile.command("list").description("List configured profiles").action(async () => {
   await runProfileList();
 });
-profile.command("create <name>").description("Create a profile from QR registration or existing app credentials").option("--agent <kind>", "agent kind (claude, codex, or mimo)").option("--workspace <path>", "initial working directory for this profile").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").action(async (name, opts) => {
+profile.command("create <name>").description("Create a profile from QR registration or existing app credentials").option("--agent <kind>", "agent kind (claude, codex, mimo, or opencode)").option("--workspace <path>", "initial working directory for this profile").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").action(async (name, opts) => {
   await runProfileCreate(name, opts);
 });
 profile.command("use <name>").description("Set the active profile").action(async (name) => {
@@ -18145,7 +18490,7 @@ program.command("ps").description("List running bridge processes on this machine
 program.command("kill <target>").description("Kill a running bridge process by short id or list index (SIGTERM, then SIGKILL after 2s). Was `stop <target>` in older versions.").action(async (target) => {
   await runKillCli(target);
 });
-program.command("start").description("Install (if needed) and start the bridge as an OS-managed daemon").option("--profile <name>", "profile name (defaults to active profile)").option("--web-ui", "run the supervisor + web console as the background service (hosts all profiles) instead of a single profile").option("--agent <kind>", "agent kind for first-run profile bootstrap (claude, codex, or mimo)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
+program.command("start").description("Install (if needed) and start the bridge as an OS-managed daemon").option("--profile <name>", "profile name (defaults to active profile)").option("--web-ui", "run the supervisor + web console as the background service (hosts all profiles) instead of a single profile").option("--agent <kind>", "agent kind for first-run profile bootstrap (claude, codex, mimo, or opencode)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
   await runServiceStart(opts);
 });
 program.command("stop").description("Stop the OS-managed daemon and disable autostart (service definition stays)").option("--profile <name>", "profile name (defaults to active profile)").option("--web-ui", "target the supervisor service (auto-detected when no per-profile service exists)").action(async (opts) => {

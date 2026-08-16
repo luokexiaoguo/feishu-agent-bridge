@@ -1,7 +1,23 @@
-# lark-channel-bridge 0.7.1-lcb-fixed — DSH-lark fork 变更说明
+# feishu-agent-bridge 0.7.1 — DSH-lark fork 变更说明
 
 > 2026-08-16 由 DSH-lark 基于 lark-channel-bridge v0.7.0 源码改造，目标：修复「长回复容易嘎」的缺陷，对齐 dsh-lark-channel 的稳定性（长连接不断线、进行中的 run 不被误杀）。
 > 传输层不变：仍基于 `@larksuite/channel`（WebSocket 长连接，与 dsh-lark-channel 同源）。
+> 2026-08-17 CLI 更名为 `feishu-agent-bridge`（自有品牌）；新增 OpenCode 适配器。
+
+## 新增适配器：OpenCode（2026-08-17）
+
+- 新 `agentKind: 'opencode'`，`src/agent/opencode/`（adapter + argv + jsonl 翻译器），支持 `opencode run --format json` JSONL 事件流（text / reasoning / tool_use / step_finish / error）。
+- 特性：`--thinking` 推理进思考气泡、`--session` 会话恢复、`--dangerously-skip-permissions` 权限映射、`--dir` 工作区；opencode 在会话 idle 后自行退出，无需 idle 启发式。
+- 注册：capability / models / profile-schema / agent-runtime / preflight / catalog / registry / locks / commands / meeting / CLI 选项 / web 控制台。
+- 配置示例：
+  ```jsonc
+  { "profiles": { "opencode": {
+      "agentKind": "opencode",
+      "opencode": { "binaryPath": "/path/to/opencode", "thinking": true },
+      "preferences": { "cotMessages": "on" }
+  } } }
+  ```
+- 测试：11 个单测（argv + jsonl 翻译器）；真实端到端冒烟验证（spawn → JSONL 解析 → sessionId/error 事件）。
 
 ## 修复内容
 
