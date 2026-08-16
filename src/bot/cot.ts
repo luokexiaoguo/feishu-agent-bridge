@@ -98,6 +98,11 @@ export class CotClient {
       body: JSON.stringify({
         receive_id: chatId,
         ...(originMessageId ? { origin_message_id: originMessageId } : {}),
+        // FIX(fork): match dsh-lark's create params — the bubble must not
+        // raise an unread badge or bump the chat's feed rank.
+        cot_hidden: false,
+        enable_badge: false,
+        update_feed_rank: false,
       }),
     });
   }
@@ -200,14 +205,14 @@ export class CotPublisher {
     }
     this.ref = { cotId, messageId };
     log.info('cot', 'created', { cotId, messageId });
+    // FIX(fork): match dsh-lark's event shape exactly — RUN_STARTED carries
+    // only threadId/runId (no `input`), and NO STEP_STARTED is written
+    // (dsh-lark: "No STEP event is written: a step is one..."). The STEP_*
+    // events were non-standard; the Feishu client rendered the "理解用户问题"
+    // step header and then failed to render any subsequent events.
     this.enqueue('RUN_STARTED', {
       threadId: this.scope,
       runId: this.runId,
-      input: { query: this.inputPreview },
-    });
-    this.enqueue('STEP_STARTED', {
-      stepId: `step-understand-${this.runId}`,
-      stepName: '理解用户问题',
     });
   }
 
@@ -245,13 +250,15 @@ export class CotPublisher {
     // already in terminal state".
     await this.flush();
     if (this.disabled || !this.ref) return;
-    try {
-      await this.client.complete(this.ref, reason);
-      this.completed = true;
-      log.info('cot', 'completed', { cotId: this.ref.cotId, reason });
-    } catch (err) {
-      log.warn('cot', 'complete-failed', { err: err instanceof Error ? err.message : String(err) });
-    }
+    // FIX(fork): dsh-lark does NOT call the complete API — the terminal
+    // RUN_FINISHED event closes the bubble on its own ("a terminal
+    // RUN_FINISHED closes it without a further call"). Calling complete()
+    // forced the bubble into a "finished" collapsed state ("思考已完成，点击
+    // 查看") instead of leaving it naturally expandable. We mirror dsh-lark:
+    // no complete call, just mark the publisher as terminal so no further
+    // updates can land after the drain.
+    this.completed = true;
+    log.info('cot', 'finished', { cotId: this.ref.cotId, reason });
   }
 
   private scheduleFlush(): void {
@@ -324,13 +331,11 @@ export async function consumeCotEvents(
   opts: { detail: CotMessagesMode },
 ): Promise<void> {
   let reasoningOpen = false;
-  let textStepOpen = false;
   let textMessageOpen = false;
   let textMessageIndex = 0;
   let textMessageId: string | undefined;
   const toolBrief = new Map<string, { name: string; input: unknown }>();
   const reasoningMessageId = `reasoning-${publisher.runId}`;
-  const finalStepId = `step-process-${publisher.runId}`;
 
   try {
     for await (const evt of events) {
@@ -403,13 +408,8 @@ export async function consumeCotEvents(
       }
       if (evt.type === 'text') {
         closeReasoningIfNeeded();
-        if (!textStepOpen) {
-          textStepOpen = true;
-          publisher.enqueue('STEP_STARTED', {
-            stepId: finalStepId,
-            stepName: '输出过程',
-          });
-        }
+        // FIX(fork): no STEP_STARTED around the text block — see the
+        // RUN_STARTED note; STEP_* is non-standard and breaks rendering.
         if (!textMessageOpen) {
           textMessageOpen = true;
           textMessageId = `text-${publisher.runId}-${++textMessageIndex}`;
@@ -425,12 +425,6 @@ export async function consumeCotEvents(
       if (evt.type === 'done' || evt.type === 'error') {
         closeReasoningIfNeeded();
         closeTextIfNeeded();
-        if (textStepOpen) {
-          publisher.enqueue('STEP_FINISHED', {
-            stepId: finalStepId,
-            stepName: '输出过程',
-          });
-        }
         if (evt.type === 'error') {
           publisher.enqueue('RUN_ERROR', { message: evt.message, code: evt.terminationReason ?? 'error' });
           await publisher.finish('error');

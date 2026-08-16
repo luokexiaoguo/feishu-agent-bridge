@@ -39,7 +39,9 @@ describe('COT event mapping', () => {
 
     const toolResult = client.events.find((event) => event.event_type === 'TOOL_CALL_RESULT');
     expect(JSON.parse(toolResult?.content ?? '{}').content).toContain('command_execution');
-    expect(client.completed).toEqual(['done']);
+    // complete API is intentionally not called (dsh-lark parity); the
+    // terminal RUN_FINISHED event closes the bubble.
+    expect(client.completed).toEqual([]);
   });
 
   it('includes tool args and output only in detailed mode', async () => {

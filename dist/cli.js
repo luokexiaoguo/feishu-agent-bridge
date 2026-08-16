@@ -13834,7 +13834,12 @@ var CotClient = class {
       method: "POST",
       body: JSON.stringify({
         receive_id: chatId,
-        ...originMessageId ? { origin_message_id: originMessageId } : {}
+        ...originMessageId ? { origin_message_id: originMessageId } : {},
+        // FIX(fork): match dsh-lark's create params — the bubble must not
+        // raise an unread badge or bump the chat's feed rank.
+        cot_hidden: false,
+        enable_badge: false,
+        update_feed_rank: false
       })
     });
   }
@@ -13906,12 +13911,7 @@ var CotPublisher = class {
     log.info("cot", "created", { cotId, messageId });
     this.enqueue("RUN_STARTED", {
       threadId: this.scope,
-      runId: this.runId,
-      input: { query: this.inputPreview }
-    });
-    this.enqueue("STEP_STARTED", {
-      stepId: `step-understand-${this.runId}`,
-      stepName: "\u7406\u89E3\u7528\u6237\u95EE\u9898"
+      runId: this.runId
     });
   }
   enqueue(eventType, content) {
@@ -13942,13 +13942,8 @@ var CotPublisher = class {
     }
     await this.flush();
     if (this.disabled || !this.ref) return;
-    try {
-      await this.client.complete(this.ref, reason);
-      this.completed = true;
-      log.info("cot", "completed", { cotId: this.ref.cotId, reason });
-    } catch (err) {
-      log.warn("cot", "complete-failed", { err: err instanceof Error ? err.message : String(err) });
-    }
+    this.completed = true;
+    log.info("cot", "finished", { cotId: this.ref.cotId, reason });
   }
   scheduleFlush() {
     if (this.timer || this.completed) return;
@@ -14003,13 +13998,11 @@ function finalAnswerOnlyState(state) {
 }
 async function consumeCotEvents(events, publisher, opts) {
   let reasoningOpen = false;
-  let textStepOpen = false;
   let textMessageOpen = false;
   let textMessageIndex = 0;
   let textMessageId;
   const toolBrief = /* @__PURE__ */ new Map();
   const reasoningMessageId = `reasoning-${publisher.runId}`;
-  const finalStepId = `step-process-${publisher.runId}`;
   try {
     for await (const evt of events) {
       if (evt.type === "system" || evt.type === "usage") continue;
@@ -14072,13 +14065,6 @@ async function consumeCotEvents(events, publisher, opts) {
       }
       if (evt.type === "text") {
         closeReasoningIfNeeded();
-        if (!textStepOpen) {
-          textStepOpen = true;
-          publisher.enqueue("STEP_STARTED", {
-            stepId: finalStepId,
-            stepName: "\u8F93\u51FA\u8FC7\u7A0B"
-          });
-        }
         if (!textMessageOpen) {
           textMessageOpen = true;
           textMessageId = `text-${publisher.runId}-${++textMessageIndex}`;
@@ -14094,12 +14080,6 @@ async function consumeCotEvents(events, publisher, opts) {
       if (evt.type === "done" || evt.type === "error") {
         closeReasoningIfNeeded();
         closeTextIfNeeded();
-        if (textStepOpen) {
-          publisher.enqueue("STEP_FINISHED", {
-            stepId: finalStepId,
-            stepName: "\u8F93\u51FA\u8FC7\u7A0B"
-          });
-        }
         if (evt.type === "error") {
           publisher.enqueue("RUN_ERROR", { message: evt.message, code: evt.terminationReason ?? "error" });
           await publisher.finish("error");
