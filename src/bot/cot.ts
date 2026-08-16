@@ -335,7 +335,11 @@ export async function consumeCotEvents(
         closeTextIfNeeded();
         if (!reasoningOpen) {
           reasoningOpen = true;
-          publisher.enqueue('REASONING_START', { messageId: reasoningMessageId });
+          // FIX(fork): dsh-lark's cot renderer does NOT emit REASONING_START /
+          // REASONING_END — only REASONING_MESSAGE_START / CONTENT / END.
+          // Emitting REASONING_START made the Feishu client treat the block
+          // as "to be shown when done" (collapsed "思考已完成" until complete),
+          // instead of streaming the reasoning live into the bubble.
           publisher.enqueue('REASONING_MESSAGE_START', {
             messageId: reasoningMessageId,
             role: 'reasoning',
@@ -446,8 +450,8 @@ export async function consumeCotEvents(
   function closeReasoningIfNeeded(): void {
     if (!reasoningOpen) return;
     reasoningOpen = false;
+    // FIX(fork): no REASONING_END — see the REASONING_MESSAGE_START note.
     publisher.enqueue('REASONING_MESSAGE_END', { messageId: reasoningMessageId });
-    publisher.enqueue('REASONING_END', { messageId: reasoningMessageId });
   }
 
   function closeTextIfNeeded(): void {

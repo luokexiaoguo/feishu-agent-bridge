@@ -14017,7 +14017,6 @@ async function consumeCotEvents(events, publisher, opts) {
         closeTextIfNeeded();
         if (!reasoningOpen) {
           reasoningOpen = true;
-          publisher.enqueue("REASONING_START", { messageId: reasoningMessageId });
           publisher.enqueue("REASONING_MESSAGE_START", {
             messageId: reasoningMessageId,
             role: "reasoning"
@@ -14124,7 +14123,6 @@ async function consumeCotEvents(events, publisher, opts) {
     if (!reasoningOpen) return;
     reasoningOpen = false;
     publisher.enqueue("REASONING_MESSAGE_END", { messageId: reasoningMessageId });
-    publisher.enqueue("REASONING_END", { messageId: reasoningMessageId });
   }
   function closeTextIfNeeded() {
     if (!textMessageOpen || !textMessageId) return;
