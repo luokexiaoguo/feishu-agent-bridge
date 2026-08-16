@@ -37,12 +37,12 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       '未检测到运行中的控制面。',
       '',
       '控制台需要 supervisor 模式（--web-ui）：',
-      '  lark-channel-bridge run --web-ui        # 前台运行 supervisor + 控制台',
-      '  lark-channel-bridge start --web-ui      # 作为后台服务运行 supervisor + 控制台',
+      '  feishu-agent-bridge run --web-ui        # 前台运行 supervisor + 控制台',
+      '  feishu-agent-bridge start --web-ui      # 作为后台服务运行 supervisor + 控制台',
       '',
       '（不带 --web-ui 的 run/start 是单 profile 无界面运行，适合无浏览器环境。）',
       '',
-      '启动后再次运行 `lark-channel-bridge ui` 打开控制台。',
+      '启动后再次运行 `feishu-agent-bridge ui` 打开控制台。',
     ].join('\n'),
   );
   process.exitCode = 1;

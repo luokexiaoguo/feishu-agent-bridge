@@ -71,7 +71,7 @@ describe('CodexAdapter process contract', () => {
     expect(record.argv).not.toContain('--ignore-user-config');
     expect(record.argv).toContain('--skip-git-repo-check');
     expect(record.argv).not.toContain('hello from lark');
-    expect(record.stdin).toContain('lark-channel-bridge 运行约定');
+    expect(record.stdin).toContain('feishu-agent-bridge 运行约定');
     expect(record.stdin).toContain('__bridge_cb');
     expect(record.stdin).toContain('lark-cli auth login');
     expect(record.stdin).toContain('LARK_CHANNEL_PROFILE');

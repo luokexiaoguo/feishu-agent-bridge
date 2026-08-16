@@ -55,7 +55,7 @@ describe('MimoAdapter process contract', () => {
     expect(record.argv).not.toContain('--dangerously-skip-permissions');
     expect(record.argv).not.toContain('--thinking');
     expect(record.argv).not.toContain('hello from lark');
-    expect(record.stdin).toContain('lark-channel-bridge 运行约定');
+    expect(record.stdin).toContain('feishu-agent-bridge 运行约定');
     expect(record.stdin).toContain('__bridge_cb');
     expect(record.stdin).toContain('hello from lark');
     expect(record.env).toMatchObject({ LARK_CHANNEL: '1' });

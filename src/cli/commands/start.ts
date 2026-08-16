@@ -393,7 +393,7 @@ async function confirmStopRuntimeLockProcess(err: RuntimeLockConflictError): Pro
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error(
       `当前 ${err.kind === 'profile' ? 'profile' : 'app'} 已有 bridge 进程占用；` +
-        '非交互模式无法确认停止，请先用 `lark-channel-bridge ps` 查看并用 `lark-channel-bridge kill <bot id>` 停止后重试',
+        '非交互模式无法确认停止，请先用 `feishu-agent-bridge ps` 查看并用 `feishu-agent-bridge kill <bot id>` 停止后重试',
     );
   }
 

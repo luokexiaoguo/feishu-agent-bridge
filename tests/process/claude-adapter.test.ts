@@ -57,7 +57,7 @@ describe('ClaudeAdapter process contract', () => {
       '--append-system-prompt-file',
     ]);
     expect(record.argv).not.toContain('hello');
-    expect(record.systemPrompt).toContain('lark-channel-bridge 运行约定');
+    expect(record.systemPrompt).toContain('feishu-agent-bridge 运行约定');
     expect(record.systemPrompt).toContain('__bridge_cb');
     expect(record.systemPrompt).toContain('LARK_CHANNEL_PROFILE');
     expect(record.systemPrompt).toContain('LARKSUITE_CLI_CONFIG_DIR');

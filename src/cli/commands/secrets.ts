@@ -9,11 +9,11 @@ import { promptPassword } from '../prompt';
 /**
  * `secrets` CLI surface. Two intended consumers:
  *
- * 1. Humans: `lark-channel-bridge secrets set/list/remove` to manage the
+ * 1. Humans: `feishu-agent-bridge secrets set/list/remove` to manage the
  *    encrypted keystore manually.
  *
  * 2. lark-cli (and any other tool implementing the exec-provider protocol):
- *    `lark-channel-bridge secrets get` reads a JSON-RPC request
+ *    `feishu-agent-bridge secrets get` reads a JSON-RPC request
  *    from stdin and writes the decrypted secret to stdout. This is what
  *    `accounts.app.secret = { source: "exec", ... }` resolves through when
  *    lark-cli binds against ~/.lark-channel/config.json.
@@ -86,7 +86,7 @@ export async function runSecretsSet(
   opts: SecretProfileOptions = {},
 ): Promise<void> {
   if (!appId) {
-    console.error('用法: lark-channel-bridge secrets set --app-id <id>');
+    console.error('用法: feishu-agent-bridge secrets set --app-id <id>');
     process.exit(1);
   }
   const plaintext = await promptPassword(`输入 ${appId} 的 App Secret: `);
@@ -116,7 +116,7 @@ export async function runSecretsRemove(
   opts: SecretProfileOptions = {},
 ): Promise<void> {
   if (!appId) {
-    console.error('用法: lark-channel-bridge secrets remove --app-id <id>');
+    console.error('用法: feishu-agent-bridge secrets remove --app-id <id>');
     process.exit(1);
   }
   const id = secretKeyForApp(appId);

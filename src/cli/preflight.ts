@@ -615,7 +615,7 @@ function printBindFailedWarning(result: RunResult, appPaths?: AppPaths): void {
 
 function restartInstruction(profile?: string): string {
   const suffix = profile ? ` --profile ${profile}` : '';
-  return `Restart the current profile: lark-channel-bridge restart${suffix}; for foreground runs, press Ctrl+C and rerun lark-channel-bridge run${suffix}.`;
+  return `Restart the current profile: feishu-agent-bridge restart${suffix}; for foreground runs, press Ctrl+C and rerun feishu-agent-bridge run${suffix}.`;
 }
 
 function shouldUseLegacyLarkChannelSourceOverlay(output: string, appPaths: AppPaths): boolean {

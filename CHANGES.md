@@ -72,5 +72,5 @@ cd /home/luoke/下载/air/lcb-fixed
 
 1. 飞书里给 claude/mimo bot 发一个明确要求"输出超长内容"的任务（如：写一篇 3000 字长文 / 分章节逐一展开）。
 2. 观察：中途停顿 >25s 不应再中断；回复应流式打完并正常结束。
-3. `lark-channel-bridge ps` 应显示版本 `0.7.1-lcb-fixed`。
+3. `feishu-agent-bridge ps` 应显示版本 `0.7.1-lcb-fixed`。
 4. 日志关注点：不再出现 `idle-finish`（静默 25s 触发）、`run-grace-expired`（90s 超时才出现且属兜底）、`已有 bridge 进程占用`。

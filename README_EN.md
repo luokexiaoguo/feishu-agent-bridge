@@ -46,26 +46,26 @@ npm i -g /path/to/feishu-agent-bridge
 ### First run
 
 ```bash
-lark-channel-bridge run
+feishu-agent-bridge run
 ```
 
-A QR code renders in your terminal → scan with Feishu → pick or create a **PersonalAgent app** → choose the agent → config is written to `~/.lark-channel/config.json`. To skip app creation, pass `--app-id`: `lark-channel-bridge run --app-id cli_xxx`.
+A QR code renders in your terminal → scan with Feishu → pick or create a **PersonalAgent app** → choose the agent → config is written to `~/.lark-channel/config.json`. To skip app creation, pass `--app-id`: `feishu-agent-bridge run --app-id cli_xxx`.
 
 ### Background service
 
 ```bash
-lark-channel-bridge start      # daemonize (Linux: systemd / macOS: launchd / Windows: .cmd)
-lark-channel-bridge status
-lark-channel-bridge logs -f
-lark-channel-bridge restart
-lark-channel-bridge stop
+feishu-agent-bridge start      # daemonize (Linux: systemd / macOS: launchd / Windows: .cmd)
+feishu-agent-bridge status
+feishu-agent-bridge logs -f
+feishu-agent-bridge restart
+feishu-agent-bridge stop
 ```
 
 Multiple bots, one per app/agent:
 
 ```bash
-lark-channel-bridge start --profile claude --agent claude
-lark-channel-bridge start --profile mimo --agent mimo
+feishu-agent-bridge start --profile claude --agent claude
+feishu-agent-bridge start --profile mimo --agent mimo
 ```
 
 ### Development

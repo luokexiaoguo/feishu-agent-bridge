@@ -29,7 +29,7 @@ import { runUi } from './commands/ui';
 const program = new Command();
 
 program
-  .name('lark-channel-bridge')
+  .name('feishu-agent-bridge')
   .description('Bridge Feishu/Lark messenger with local CLI coding agents')
   .version(pkg.version, '-v, --version');
 

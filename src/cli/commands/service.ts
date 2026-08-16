@@ -201,7 +201,7 @@ async function assertLockNotHeldByAnotherRuntime(
     if (!opts.confirmStopRuntimeLockProcess && (!process.stdin.isTTY || !process.stdout.isTTY)) {
       console.error(
         `  非交互模式无法确认停止 ${kind === 'profile' ? 'profile' : 'app'} 占用进程。` +
-          '请先用 `lark-channel-bridge ps` 查看并用 `lark-channel-bridge kill <bot id>` 停止后重试。',
+          '请先用 `feishu-agent-bridge ps` 查看并用 `feishu-agent-bridge kill <bot id>` 停止后重试。',
       );
       process.exit(1);
     }
@@ -425,7 +425,7 @@ async function runServiceStartWebUi(opts: ServiceStartOptions): Promise<void> {
   }
 
   await reportConnectAfter('started', profile, adapter.start);
-  console.log('  控制台由后台 supervisor 托管；用 `lark-channel-bridge ui` 打开');
+  console.log('  控制台由后台 supervisor 托管；用 `feishu-agent-bridge ui` 打开');
 }
 
 /**

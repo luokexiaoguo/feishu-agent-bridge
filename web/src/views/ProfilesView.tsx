@@ -132,7 +132,7 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
             <DialogTitle>停止 {stopTarget}？</DialogTitle>
             <DialogDescription>
               将停止该 profile 正在运行的 bot。若它是后台服务，会一并禁用自动重启（不会被 KeepAlive 拉起）；
-              下次可用 <code>lark-channel-bridge start</code> 重新启动。
+              下次可用 <code>feishu-agent-bridge start</code> 重新启动。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -46,26 +46,26 @@ npm i -g /path/to/feishu-agent-bridge
 ### 首次运行
 
 ```bash
-lark-channel-bridge run
+feishu-agent-bridge run
 ```
 
-终端出现二维码 → 飞书扫码 → 选择或创建 **PersonalAgent 应用** → 选择要初始化的 agent → 配置写入 `~/.lark-channel/config.json`。已有应用可跳过创建：`lark-channel-bridge run --app-id cli_xxx`。
+终端出现二维码 → 飞书扫码 → 选择或创建 **PersonalAgent 应用** → 选择要初始化的 agent → 配置写入 `~/.lark-channel/config.json`。已有应用可跳过创建：`feishu-agent-bridge run --app-id cli_xxx`。
 
 ### 后台常驻
 
 ```bash
-lark-channel-bridge start      # 后台常驻（Linux: systemd / macOS: launchd / Windows: .cmd）
-lark-channel-bridge status     # 查看状态
-lark-channel-bridge logs -f    # 查看日志
-lark-channel-bridge restart    # 重启
-lark-channel-bridge stop       # 停止
+feishu-agent-bridge start      # 后台常驻（Linux: systemd / macOS: launchd / Windows: .cmd）
+feishu-agent-bridge status     # 查看状态
+feishu-agent-bridge logs -f    # 查看日志
+feishu-agent-bridge restart    # 重启
+feishu-agent-bridge stop       # 停止
 ```
 
 多机器人（一个应用对应一个 agent，各自独立）：
 
 ```bash
-lark-channel-bridge start --profile claude --agent claude
-lark-channel-bridge start --profile mimo --agent mimo
+feishu-agent-bridge start --profile claude --agent claude
+feishu-agent-bridge start --profile mimo --agent mimo
 ```
 
 ### 本地开发

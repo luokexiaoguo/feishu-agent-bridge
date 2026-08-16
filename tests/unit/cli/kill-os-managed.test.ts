@@ -53,8 +53,8 @@ describe('kill on OS-managed processes', () => {
     // Killing it would only hand the pid back to launchd's KeepAlive.
     expect(kill).not.toHaveBeenCalled();
     expect(errors.join('\n')).toContain('由 launchd (macOS) 托管');
-    expect(errors.join('\n')).toContain('lark-channel-bridge stop --web-ui');
-    expect(errors.join('\n')).toContain('lark-channel-bridge restart --web-ui');
+    expect(errors.join('\n')).toContain('feishu-agent-bridge stop --web-ui');
+    expect(errors.join('\n')).toContain('feishu-agent-bridge restart --web-ui');
 
     exit.mockRestore();
     kill.mockRestore();
@@ -75,7 +75,7 @@ describe('kill on OS-managed processes', () => {
 
     await expect(runKillCli('4a93')).rejects.toThrow('exit:1');
 
-    expect(errors.join('\n')).toContain('lark-channel-bridge stop --profile codex-dev');
+    expect(errors.join('\n')).toContain('feishu-agent-bridge stop --profile codex-dev');
 
     exit.mockRestore();
   });

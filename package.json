@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/luokexiaoguo/feishu-agent-bridge#readme",
   "bin": {
+    "feishu-agent-bridge": "./bin/lark-channel-bridge.mjs",
     "lark-channel-bridge": "./bin/lark-channel-bridge.mjs"
   },
   "exports": {
