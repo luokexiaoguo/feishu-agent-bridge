@@ -143,6 +143,8 @@ export class CotPublisher {
   disabled = false;
   degradedReason: string | undefined;
   private buffer: CotEvent[] = [];
+  /** Strictly-increasing timestamp source — see {@link nextTimestamp}. */
+  private lastTimestamp = 0;
   private flushing: Promise<void> | undefined;
   private timer: NodeJS.Timeout | undefined;
 
@@ -204,9 +206,22 @@ export class CotPublisher {
     this.buffer.push({
       event_type: eventType,
       content: JSON.stringify(content),
-      timestamp: Date.now(),
+      // FIX(fork): the message_cot API requires strictly increasing
+      // timestamps (the client orders events by this value). Date.now() can
+      // collide within one millisecond — token-level streams (hermes
+      // agent_thought_chunk bursts) hit that constantly and the update
+      // failed with 400 99992402 "field validation failed". dsh-lark's cot
+      // renderer carries the same guard (lastTimestamp).
+      timestamp: this.nextTimestamp(),
     });
     this.scheduleFlush();
+  }
+
+  private nextTimestamp(): number {
+    const now = Date.now();
+    const ts = now > this.lastTimestamp ? now : this.lastTimestamp + 1;
+    this.lastTimestamp = ts;
+    return ts;
   }
 
   async finish(reason: string): Promise<void> {
