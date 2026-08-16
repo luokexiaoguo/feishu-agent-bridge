@@ -22,6 +22,9 @@ This is a stabilization fork of `lark-channel-bridge` v0.7.0: it fixes the "long
 | 多工作区 `/cd` `/ws`，模型 `/model` 切换 | Multi-workspace via `/cd` `/ws`, model switching via `/model` |
 | 用户 / 群白名单、@ 才响应、管理员分级 | User/group allowlists, @mention-only in groups, admin tiers |
 | 一条命令扫码创建飞书应用并后台常驻 | One-command QR onboarding + built-in daemon (systemd / launchd) |
+| 多人协作：`/invite user` `/remove user` `/invite group` `/remove group` `/invite all group` 管理群成员与访问 | Collaboration: `/invite user` `/remove user` `/invite group` `/remove group` `/invite all group` manage members & access |
+| 支持 Windows（`.cmd` 启动器）、macOS（launchd）、Linux（systemd）三平台后台服务 | Windows (`.cmd`), macOS (launchd), Linux (systemd) background service |
+| profile 管理：`profile export` / `profile remove`（`--purge --yes` 或 `--include-secrets --yes`） | Profile management: `profile export` / `profile remove` (`--purge --yes` / `--include-secrets --yes`) |
 
 ---
 
@@ -108,6 +111,19 @@ lark-channel-bridge start --profile claude --agent claude
 lark-channel-bridge start --profile mimo --agent mimo
 ```
 
+每个 profile 是独立的 **per-profile service**（systemd unit / launchd plist，Windows 用 `.cmd` wrapper），独立会话、独立工作区、独立日志。
+
+### 本地开发 / Development
+
+```bash
+pnpm test          # 全部测试（含依赖真实环境的 integration）
+pnpm test:unit     # 仅单元测试（CI 使用）
+pnpm typecheck     # 类型检查
+pnpm build         # 构建 dist（= pnpm build:web && tsup）
+```
+
+> `lark-cli identity policy`（`lark-cli 身份策略`）与 `profile-local lark-cli directory`（`当前 profile 的 lark-cli 目录`）：本桥通过 `LARK_CHANNEL_HOME=<root>/profiles/<name>/lark-cli` 为每个 profile 隔离 lark-cli 身份与目录，避免多机器人身份串扰。Cloud-doc comments are document-scoped（云文档评论按文档权限生效）——评论内 @ 机器人按文档权限门控，与群/单聊的访问控制相互独立。
+
 ---
 
 ## ⚙️ 配置 / Configuration（`~/.lark-channel/config.json`）
@@ -124,7 +140,8 @@ lark-channel-bridge start --profile mimo --agent mimo
         "runIdleTimeoutMinutes": 0,   // claude run 级空闲超时（0=禁用）
         "disconnectRunGraceMs": 90000 // 断线时等待进行中 run 的宽限（0=立即杀，旧行为）
       },
-      "access": { "allowedUsers": [], "allowedChats": [], "requireMentionInGroup": true }
+      "access": { "allowedUsers": [], "allowedChats": [], "requireMentionInGroup": true },
+      "workspaces": { "default": "/path/to/project" }
     },
     "mimo": {
       "agentKind": "mimo",
@@ -138,6 +155,9 @@ lark-channel-bridge start --profile mimo --agent mimo
   }
 }
 ```
+
+- `workspaces.default`：该 profile 的默认工作目录（`/cd` 可切换）。
+- **权限模型 / Permission model**：更细的 agent 权限走 `permissions` 配置（`"defaultAccess": "full"` 与 `"maxAccess": "full"` 双档），替代旧版 `sandbox` 配置（legacy `sandbox`，旧版 `sandbox` 已废弃）：`defaultAccess` 是默认授权档，`maxAccess` 是本 profile 允许的最大档位，二者共同决定 agent 可执行操作的上限。请勿再使用旧版 `sandbox` 字段。
 
 **新增 / 关键配置项：**
 
@@ -171,6 +191,8 @@ lark-channel-bridge start --profile mimo --agent mimo
 | `/cd <path>` `/ws` | 切换 / 管理工作区 |
 | `/model` | 模型选择卡片 |
 | `/config` | 实时调整偏好（cot 模式、工具显示等） |
+| `/invite user` `/invite group` `/invite all group` | 按用户 / 群 / 全员群邀请机器人进群协作 |
+| `/remove user` `/remove group` | 移出用户 / 群 |
 | `/reconnect` `/exit` | 重连 / 退出（`/reconnect --wait` 等当前 run 结束再重连） |
 | `/doctor` | 自检（连接、agent、会话健康） |
 
