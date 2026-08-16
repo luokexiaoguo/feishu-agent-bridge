@@ -1,0 +1,25 @@
+node_modules/
+coverage/
+web/dist/
+.corepack/
+*.log
+*.tsbuildinfo
+
+.env
+.env.local
+.env.*.local
+.npmrc
+
+.DS_Store
+.idea/
+.vscode/
+.mimocode/
+
+# Local maintenance scripts and unreleased changelog are not part of the package
+scripts/
+CHANGELOG.md
+tests-smoke/
+
+# NOTE: `dist/` and `src/ui/generated/` are committed on purpose so the repo
+# is usable out of the box (build artifacts are small). Rebuild with:
+#   pnpm build      # = pnpm build:web && tsup
