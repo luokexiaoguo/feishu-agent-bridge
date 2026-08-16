@@ -608,5 +608,6 @@ function agentDisplay(agentKind: ProcessEntry['agentKind']): { id: string; displ
   if (agentKind === 'codex') return { id: 'codex', displayName: 'Codex CLI' };
   if (agentKind === 'mimo') return { id: 'mimo', displayName: 'MiMo Code' };
   if (agentKind === 'opencode') return { id: 'opencode', displayName: 'OpenCode' };
+  if (agentKind === 'hermes') return { id: 'hermes', displayName: 'Hermes Agent' };
   return { id: 'claude', displayName: 'Claude Code' };
 }

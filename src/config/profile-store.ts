@@ -98,6 +98,8 @@ function serializeProfileConfig(profile: ProfileConfig): StoredProfileConfig {
     permissions: profile.permissions,
     ...(profile.codex ? { codex: profile.codex } : {}),
     ...(profile.mimo ? { mimo: profile.mimo } : {}),
+    ...(profile.opencode ? { opencode: profile.opencode } : {}),
+    ...(profile.hermes ? { hermes: profile.hermes } : {}),
     attachments: profile.attachments,
     comments: {},
     meeting: profile.meeting,

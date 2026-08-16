@@ -13,7 +13,7 @@ import {
   type PermissionSource,
 } from './permissions';
 
-export type AgentKind = 'claude' | 'codex' | 'mimo' | 'opencode';
+export type AgentKind = 'claude' | 'codex' | 'mimo' | 'opencode' | 'hermes';
 export type SandboxMode = CodexSandboxMode;
 export type { AccessMode, PermissionConfig, PermissionSource };
 
@@ -79,6 +79,17 @@ export interface OpencodeConfig {
   mode?: number;
   /** Forward `--thinking` so reasoning events appear in the JSONL stream. */
   thinking?: boolean;
+}
+
+export interface HermesConfig {
+  binaryPath: string;
+  realpath?: string;
+  version?: string;
+  sha256?: string;
+  owner?: number;
+  mode?: number;
+  /** Extra args for `hermes acp`, e.g. ["--profile", "tomato-studio"]. */
+  acpArgs?: string[];
 }
 
 export interface AttachmentConfig {
@@ -192,6 +203,7 @@ export interface ProfileConfig {
   codex?: CodexConfig;
   mimo?: MimoConfig;
   opencode?: OpencodeConfig;
+  hermes?: HermesConfig;
   attachments: AttachmentConfig;
   comments: CommentConfig;
   /** In-meeting agent settings. See {@link MeetingConfig}. */
@@ -238,6 +250,7 @@ export interface CreateDefaultProfileConfigInput {
   codex?: CodexConfig;
   mimo?: MimoConfig;
   opencode?: OpencodeConfig;
+  hermes?: HermesConfig;
   secrets?: SecretsConfig;
 }
 
@@ -275,6 +288,7 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
     codex?: CodexConfig & { flags?: unknown };
     mimo?: MimoConfig;
     opencode?: OpencodeConfig;
+    hermes?: HermesConfig;
     attachments?: Partial<AttachmentConfig>;
     comments?: unknown;
     meeting?: unknown;
@@ -284,8 +298,8 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
   if (raw.schemaVersion !== 2) {
     throw new Error('profile schemaVersion must be 2');
   }
-  if (raw.agentKind !== 'claude' && raw.agentKind !== 'codex' && raw.agentKind !== 'mimo' && raw.agentKind !== 'opencode') {
-    throw new Error('agentKind must be claude, codex, mimo, or opencode');
+  if (raw.agentKind !== 'claude' && raw.agentKind !== 'codex' && raw.agentKind !== 'mimo' && raw.agentKind !== 'opencode' && raw.agentKind !== 'hermes') {
+    throw new Error('agentKind must be claude, codex, mimo, opencode, or hermes');
   }
   const accounts = normalizeAccounts(raw.accounts);
   if (raw.agentKind === 'codex' && !raw.codex) {
@@ -296,6 +310,9 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
   }
   if (raw.agentKind === 'opencode' && !raw.opencode) {
     throw new Error('opencode profile requires opencode configuration');
+  }
+  if (raw.agentKind === 'hermes' && !raw.hermes) {
+    throw new Error('hermes profile requires hermes configuration');
   }
 
   const preferences = normalizePreferences(raw.preferences);
@@ -328,6 +345,7 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
     ...(raw.codex ? { codex: normalizeCodex(raw.codex) } : {}),
     ...(raw.mimo ? { mimo: normalizeMimo(raw.mimo) } : {}),
     ...(raw.opencode ? { opencode: normalizeOpencode(raw.opencode) } : {}),
+    ...(raw.hermes ? { hermes: normalizeHermes(raw.hermes) } : {}),
     attachments: {
       maxCount: numberOr(raw.attachments?.maxCount, 10),
       maxBytes: numberOr(raw.attachments?.maxBytes, 100 * 1024 * 1024),
@@ -462,6 +480,19 @@ function normalizeOpencode(input: OpencodeConfig): OpencodeConfig {
     thinking: input.thinking === true,
   };
   return opencode;
+}
+
+function normalizeHermes(input: HermesConfig): HermesConfig {
+  const hermes: HermesConfig = {
+    binaryPath: input.binaryPath,
+    ...(typeof input.realpath === 'string' ? { realpath: input.realpath } : {}),
+    ...(typeof input.version === 'string' ? { version: input.version } : {}),
+    ...(typeof input.sha256 === 'string' ? { sha256: input.sha256 } : {}),
+    ...(typeof input.owner === 'number' ? { owner: input.owner } : {}),
+    ...(typeof input.mode === 'number' ? { mode: input.mode } : {}),
+    ...(Array.isArray(input.acpArgs) ? { acpArgs: input.acpArgs.map(String) } : {}),
+  };
+  return hermes;
 }
 
 function normalizeComments(_input: unknown): CommentConfig {

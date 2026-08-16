@@ -351,7 +351,7 @@ function getAgentPreflightDiagnostic(err) {
 function isAgentPreflightDiagnostic(input) {
   if (!input || typeof input !== "object") return false;
   const raw = input;
-  return typeof raw.code === "string" && raw.code.startsWith("agent-") && (raw.agentId === "claude" || raw.agentId === "codex" || raw.agentId === "mimo" || raw.agentId === "opencode") && typeof raw.agentName === "string" && typeof raw.command === "string";
+  return typeof raw.code === "string" && raw.code.startsWith("agent-") && (raw.agentId === "claude" || raw.agentId === "codex" || raw.agentId === "mimo" || raw.agentId === "opencode" || raw.agentId === "hermes") && typeof raw.agentName === "string" && typeof raw.command === "string";
 }
 function codeForSpawnError(err) {
   if (err.code === "ENOENT") return "agent-binary-not-found";
@@ -581,8 +581,8 @@ function normalizeProfileConfig(input) {
   if (raw.schemaVersion !== 2) {
     throw new Error("profile schemaVersion must be 2");
   }
-  if (raw.agentKind !== "claude" && raw.agentKind !== "codex" && raw.agentKind !== "mimo" && raw.agentKind !== "opencode") {
-    throw new Error("agentKind must be claude, codex, mimo, or opencode");
+  if (raw.agentKind !== "claude" && raw.agentKind !== "codex" && raw.agentKind !== "mimo" && raw.agentKind !== "opencode" && raw.agentKind !== "hermes") {
+    throw new Error("agentKind must be claude, codex, mimo, opencode, or hermes");
   }
   const accounts = normalizeAccounts(raw.accounts);
   if (raw.agentKind === "codex" && !raw.codex) {
@@ -593,6 +593,9 @@ function normalizeProfileConfig(input) {
   }
   if (raw.agentKind === "opencode" && !raw.opencode) {
     throw new Error("opencode profile requires opencode configuration");
+  }
+  if (raw.agentKind === "hermes" && !raw.hermes) {
+    throw new Error("hermes profile requires hermes configuration");
   }
   const preferences = normalizePreferences(raw.preferences);
   const access3 = normalizeAccess(
@@ -623,6 +626,7 @@ function normalizeProfileConfig(input) {
     ...raw.codex ? { codex: normalizeCodex(raw.codex) } : {},
     ...raw.mimo ? { mimo: normalizeMimo(raw.mimo) } : {},
     ...raw.opencode ? { opencode: normalizeOpencode(raw.opencode) } : {},
+    ...raw.hermes ? { hermes: normalizeHermes(raw.hermes) } : {},
     attachments: {
       maxCount: numberOr(raw.attachments?.maxCount, 10),
       maxBytes: numberOr(raw.attachments?.maxBytes, 100 * 1024 * 1024),
@@ -733,6 +737,18 @@ function normalizeOpencode(input) {
     thinking: input.thinking === true
   };
   return opencode;
+}
+function normalizeHermes(input) {
+  const hermes = {
+    binaryPath: input.binaryPath,
+    ...typeof input.realpath === "string" ? { realpath: input.realpath } : {},
+    ...typeof input.version === "string" ? { version: input.version } : {},
+    ...typeof input.sha256 === "string" ? { sha256: input.sha256 } : {},
+    ...typeof input.owner === "number" ? { owner: input.owner } : {},
+    ...typeof input.mode === "number" ? { mode: input.mode } : {},
+    ...Array.isArray(input.acpArgs) ? { acpArgs: input.acpArgs.map(String) } : {}
+  };
+  return hermes;
 }
 function normalizeComments(_input) {
   return {};
@@ -1801,7 +1817,7 @@ async function acquireRuntimeLock(meta) {
 function isRuntimeLockMeta(value) {
   if (!value || typeof value !== "object") return false;
   const meta = value;
-  return (meta.kind === "profile" || meta.kind === "app") && typeof meta.target === "string" && typeof meta.profile === "string" && (meta.agentKind === "claude" || meta.agentKind === "codex" || meta.agentKind === "mimo" || meta.agentKind === "opencode") && typeof meta.pid === "number" && typeof meta.startedAt === "string" && (meta.appId === void 0 || typeof meta.appId === "string");
+  return (meta.kind === "profile" || meta.kind === "app") && typeof meta.target === "string" && typeof meta.profile === "string" && (meta.agentKind === "claude" || meta.agentKind === "codex" || meta.agentKind === "mimo" || meta.agentKind === "opencode" || meta.agentKind === "hermes") && typeof meta.pid === "number" && typeof meta.startedAt === "string" && (meta.appId === void 0 || typeof meta.appId === "string");
 }
 
 // src/runtime/registry.ts
@@ -1809,7 +1825,7 @@ var EMPTY = { entries: [] };
 function isValidEntry(e) {
   if (!e || typeof e !== "object") return false;
   const x = e;
-  return typeof x.id === "string" && typeof x.pid === "number" && typeof x.appId === "string" && (x.tenant === "feishu" || x.tenant === "lark") && typeof x.profileName === "string" && (x.agentKind === "claude" || x.agentKind === "codex" || x.agentKind === "mimo" || x.agentKind === "opencode") && typeof x.configPath === "string" && typeof x.startedAt === "string" && typeof x.version === "string";
+  return typeof x.id === "string" && typeof x.pid === "number" && typeof x.appId === "string" && (x.tenant === "feishu" || x.tenant === "lark") && typeof x.profileName === "string" && (x.agentKind === "claude" || x.agentKind === "codex" || x.agentKind === "mimo" || x.agentKind === "opencode" || x.agentKind === "hermes") && typeof x.configPath === "string" && typeof x.startedAt === "string" && typeof x.version === "string";
 }
 function isAlive(pid) {
   try {
@@ -2246,6 +2262,8 @@ function serializeProfileConfig(profile2) {
     permissions: profile2.permissions,
     ...profile2.codex ? { codex: profile2.codex } : {},
     ...profile2.mimo ? { mimo: profile2.mimo } : {},
+    ...profile2.opencode ? { opencode: profile2.opencode } : {},
+    ...profile2.hermes ? { hermes: profile2.hermes } : {},
     attachments: profile2.attachments,
     comments: {},
     meeting: profile2.meeting,
@@ -5989,6 +6007,7 @@ function agentDisplay(agentKind) {
   if (agentKind === "codex") return { id: "codex", displayName: "Codex CLI" };
   if (agentKind === "mimo") return { id: "mimo", displayName: "MiMo Code" };
   if (agentKind === "opencode") return { id: "opencode", displayName: "OpenCode" };
+  if (agentKind === "hermes") return { id: "hermes", displayName: "Hermes Agent" };
   return { id: "claude", displayName: "Claude Code" };
 }
 
@@ -5996,7 +6015,7 @@ function agentDisplay(agentKind) {
 import dns from "dns";
 import os from "os";
 import { unlink as unlink2 } from "fs/promises";
-import { createInterface as createInterface9 } from "readline";
+import { createInterface as createInterface10 } from "readline";
 
 // src/agent/claude/adapter.ts
 import { mkdtempSync, rmSync, writeFileSync as writeFileSync2 } from "fs";
@@ -7046,6 +7065,23 @@ function mimoCapability(profile2) {
     }
   };
 }
+function hermesCapability(profile2) {
+  const maxAccess = profile2.permissions.maxAccess;
+  return {
+    agentId: "hermes",
+    sessionKind: "hermes-session",
+    promptInjection: "stdin-prefix",
+    systemPrompt: BRIDGE_SYSTEM_PROMPT,
+    supportsNativeHistory: false,
+    callback: {
+      marker: "__bridge_cb",
+      legacyMarkers: []
+    },
+    permissions: {
+      maxAccess
+    }
+  };
+}
 function opencodeCapability(profile2) {
   const maxAccess = profile2.permissions.maxAccess;
   return {
@@ -7089,10 +7125,16 @@ var OPENCODE_MODELS = [
   { value: DEFAULT_MODEL, label: "\u8DDF\u968F\u9ED8\u8BA4\uFF08\u4E0D\u6307\u5B9A\uFF09" },
   { value: "opencode/zen", label: "opencode zen\uFF08\u9ED8\u8BA4\u7F51\u5173\uFF09" }
 ];
+var HERMES_MODELS = [
+  { value: DEFAULT_MODEL, label: "\u8DDF\u968F\u9ED8\u8BA4\uFF08\u4E0D\u6307\u5B9A\uFF09" },
+  { value: "deepseek:deepseek-v4-pro", label: "DeepSeek \xB7 deepseek-v4-pro" },
+  { value: "deepseek:deepseek-v4-flash", label: "DeepSeek \xB7 deepseek-v4-flash" }
+];
 function supportedModels(agentKind) {
   if (agentKind === "codex") return CODEX_MODELS;
   if (agentKind === "mimo") return MIMO_MODELS;
   if (agentKind === "opencode") return OPENCODE_MODELS;
+  if (agentKind === "hermes") return HERMES_MODELS;
   return CLAUDE_MODELS;
 }
 function isDefaultModel(value) {
@@ -9687,7 +9729,7 @@ async function startRunFlow(input) {
       cwdRealpath: workspace.cwdRealpath,
       policyFingerprint: policy.policyFingerprint
     });
-    if (catalogEntry?.agentId === "claude" || catalogEntry?.agentId === "mimo" || catalogEntry?.agentId === "opencode") {
+    if (catalogEntry?.agentId === "claude" || catalogEntry?.agentId === "mimo" || catalogEntry?.agentId === "opencode" || catalogEntry?.agentId === "hermes") {
       sessionId = catalogEntry.sessionId;
       resumeFrom = sessionId;
     } else if (catalogEntry?.agentId === "codex") {
@@ -9909,7 +9951,7 @@ function resolveSummaryTarget(preference, originChatId, botOwnerId) {
 async function runMeetingAgent(deps, prompt, usedPrefix) {
   const { session, controls } = deps;
   const scopeId = meetingScopeId(session.meetingId);
-  const capability = controls.profileConfig.agentKind === "codex" ? codexCapability(controls.profileConfig) : controls.profileConfig.agentKind === "mimo" ? mimoCapability(controls.profileConfig) : controls.profileConfig.agentKind === "opencode" ? opencodeCapability(controls.profileConfig) : claudeCapability(controls.profileConfig);
+  const capability = controls.profileConfig.agentKind === "codex" ? codexCapability(controls.profileConfig) : controls.profileConfig.agentKind === "mimo" ? mimoCapability(controls.profileConfig) : controls.profileConfig.agentKind === "opencode" ? opencodeCapability(controls.profileConfig) : controls.profileConfig.agentKind === "hermes" ? hermesCapability(controls.profileConfig) : claudeCapability(controls.profileConfig);
   const result = await startRunFlow({
     scopeId,
     scope: {
@@ -10439,7 +10481,7 @@ function consumeResumeCandidate(nonce, identity) {
   const candidate = resumeCandidates.get(nonce);
   if (!candidate) return void 0;
   resumeCandidates.delete(nonce);
-  if (candidate.scopeId !== identity.scopeId || candidate.agentId !== identity.agentId || candidate.cwdRealpath !== identity.cwdRealpath || candidate.policyFingerprint !== identity.policyFingerprint || identity.agentId === "claude" && !candidate.sessionId || identity.agentId === "codex" && !candidate.threadId || identity.agentId === "mimo" && !candidate.sessionId || identity.agentId === "opencode" && !candidate.sessionId) {
+  if (candidate.scopeId !== identity.scopeId || candidate.agentId !== identity.agentId || candidate.cwdRealpath !== identity.cwdRealpath || candidate.policyFingerprint !== identity.policyFingerprint || identity.agentId === "claude" && !candidate.sessionId || identity.agentId === "codex" && !candidate.threadId || identity.agentId === "mimo" && !candidate.sessionId || identity.agentId === "opencode" && !candidate.sessionId || identity.agentId === "hermes" && !candidate.sessionId) {
     return void 0;
   }
   return candidate;
@@ -10779,7 +10821,7 @@ async function handleDoctor(args, ctx) {
     return;
   }
   doctorLastByOperator.set(rateKey, now);
-  const capability = ctx.controls.profileConfig.agentKind === "codex" ? codexCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "mimo" ? mimoCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "opencode" ? opencodeCapability(ctx.controls.profileConfig) : claudeCapability(ctx.controls.profileConfig);
+  const capability = ctx.controls.profileConfig.agentKind === "codex" ? codexCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "mimo" ? mimoCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "opencode" ? opencodeCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "hermes" ? hermesCapability(ctx.controls.profileConfig) : claudeCapability(ctx.controls.profileConfig);
   const policy = evaluateRunPolicy({
     scope: {
       source: "im",
@@ -16364,7 +16406,7 @@ async function onboardValidate(body) {
 }
 async function onboardCreate(body, rootDir) {
   const fv = asRecord4(body);
-  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" ? fv.agentKind : "claude";
+  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" || fv.agentKind === "hermes" ? fv.agentKind : "claude";
   const input = {
     profile: String(fv.profile ?? "").trim() || agentKind,
     agentKind,
@@ -16503,7 +16545,7 @@ async function finishQrRegistration(body, rootDir) {
   if (s.status === "done" && s.profile) return { profile: s.profile };
   if (s.status === "error") throw new HttpError(400, s.error ?? "\u626B\u7801\u521B\u5EFA\u5931\u8D25");
   if (!s.app) throw new HttpError(409, "\u5C1A\u672A\u5B8C\u6210\u626B\u7801");
-  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" ? fv.agentKind : "claude";
+  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" || fv.agentKind === "hermes" ? fv.agentKind : "claude";
   const profile2 = String(fv.profile ?? "").trim() || s.suggestedProfile || agentKind;
   const created = await writeNewProfile(
     { profile: profile2, agentKind, appId: s.app.appId, appSecret: s.app.appSecret, tenant: s.app.tenant },
@@ -16995,7 +17037,7 @@ var SessionCatalog = class {
 function normalizeEntry(input) {
   if (!input || typeof input !== "object") return void 0;
   const raw = input;
-  if (typeof raw.key !== "string" || typeof raw.scopeId !== "string" || raw.agentId !== "claude" && raw.agentId !== "codex" && raw.agentId !== "mimo" && raw.agentId !== "opencode" || typeof raw.cwdRealpath !== "string" || typeof raw.policyFingerprint !== "string" || raw.status !== "active" && raw.status !== "archived" || typeof raw.updatedAt !== "number") {
+  if (typeof raw.key !== "string" || typeof raw.scopeId !== "string" || raw.agentId !== "claude" && raw.agentId !== "codex" && raw.agentId !== "mimo" && raw.agentId !== "opencode" && raw.agentId !== "hermes" || typeof raw.cwdRealpath !== "string" || typeof raw.policyFingerprint !== "string" || raw.status !== "active" && raw.status !== "archived" || typeof raw.updatedAt !== "number") {
     return void 0;
   }
   return {
@@ -17810,6 +17852,394 @@ function isWindowsCommandNotFoundLine4(line) {
   return process.platform === "win32" && /'(opencode)' is not recognized|'opencode' 不是内部或外部命令/i.test(line);
 }
 
+// src/agent/hermes/acp-client.ts
+import { createInterface as createInterface9 } from "readline";
+import { spawn } from "child_process";
+var AcpConnection = class {
+  child;
+  rl;
+  nextId = 1;
+  pending = /* @__PURE__ */ new Map();
+  updateHandlers = /* @__PURE__ */ new Set();
+  closed = false;
+  constructor(binary, args) {
+    this.child = spawn(binary, args, {
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    this.rl = createInterface9({ input: this.child.stdout, crlfDelay: Infinity });
+    this.rl.on("line", (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      let msg;
+      try {
+        msg = JSON.parse(trimmed);
+      } catch {
+        return;
+      }
+      this.dispatch(msg);
+    });
+    this.child.stderr.on("data", () => {
+    });
+    this.child.on("error", (err) => {
+      this.rejectAll(err);
+    });
+    this.child.on("exit", () => {
+      this.closed = true;
+      this.rejectAll(new Error("hermes acp process exited"));
+    });
+  }
+  get pid() {
+    return this.child.pid;
+  }
+  get exited() {
+    return this.closed || this.child.exitCode !== null || this.child.signalCode !== null;
+  }
+  onUpdate(handler) {
+    this.updateHandlers.add(handler);
+    return () => this.updateHandlers.delete(handler);
+  }
+  onStderr(handler) {
+    this.child.stderr.on("data", handler);
+  }
+  dispatch(msg) {
+    if (!msg || typeof msg !== "object") return;
+    const m = msg;
+    if (typeof m.id === "number" && this.pending.has(m.id)) {
+      const entry = this.pending.get(m.id);
+      this.pending.delete(m.id);
+      if (m.error) {
+        entry.reject(new Error(JSON.stringify(m.error).slice(0, 300)));
+      } else {
+        entry.resolve(m.result);
+      }
+      return;
+    }
+    if (m.method === "session/update") {
+      const update = m.params?.update;
+      if (update) {
+        for (const h of [...this.updateHandlers]) h(update);
+      }
+    }
+  }
+  request(method, params) {
+    if (this.closed || this.child.exitCode !== null) {
+      return Promise.reject(new Error("hermes acp process is not running"));
+    }
+    const id = this.nextId++;
+    const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n";
+    return new Promise((resolve2, reject4) => {
+      this.pending.set(id, { resolve: resolve2, reject: reject4 });
+      this.child.stdin.write(payload, (err) => {
+        if (err) {
+          this.pending.delete(id);
+          reject4(err);
+        }
+      });
+    });
+  }
+  rejectAll(err) {
+    for (const [, entry] of this.pending) entry.reject(err);
+    this.pending.clear();
+  }
+  async initialize() {
+    await this.request("initialize", {
+      protocolVersion: 1,
+      clientCapabilities: { fs: {} }
+    });
+  }
+  async newSession(cwd, opts = {}) {
+    const params = {
+      cwd,
+      mcpServers: [],
+      clientCapabilities: { fs: {} }
+    };
+    if (opts.resumeSessionId) params.resumeSessionId = opts.resumeSessionId;
+    const result = await this.request("session/new", params);
+    const sessionId = String(result?.sessionId ?? "");
+    if (!sessionId) throw new Error("session/new returned no sessionId");
+    return { sessionId, models: { availableModels: result?.models?.availableModels } };
+  }
+  /**
+   * Send one prompt and wait for its own response (the turn-complete
+   * signal). All `session/update` notifications received while the prompt is
+   * in flight are collected and returned alongside the response
+   * (`stopReason` / `usage`).
+   */
+  async prompt(sessionId, text) {
+    const params = {
+      sessionId,
+      prompt: [{ type: "text", text }],
+      mcpServers: [],
+      clientCapabilities: { fs: {} }
+    };
+    const resultPromise = this.request("session/prompt", params);
+    const updates = [];
+    const off = this.onUpdate((u) => updates.push(u));
+    try {
+      const result = await resultPromise;
+      return { updates, result };
+    } finally {
+      off();
+    }
+  }
+  async stop() {
+    if (this.closed || this.child.exitCode !== null) return;
+    try {
+      this.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: this.nextId++, method: "session/stop", params: {} }) + "\n");
+    } catch {
+    }
+  }
+  kill(signal = "SIGTERM") {
+    if (this.child.exitCode === null && this.child.signalCode === null) {
+      try {
+        this.child.kill(signal);
+      } catch {
+      }
+    }
+  }
+  waitForExit(timeoutMs) {
+    if (this.child.exitCode !== null || this.child.signalCode !== null) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve2) => {
+      const timer = setTimeout(() => {
+        this.child.removeListener("exit", onExit);
+        resolve2(false);
+      }, timeoutMs);
+      const onExit = () => {
+        clearTimeout(timer);
+        resolve2(true);
+      };
+      this.child.once("exit", onExit);
+    });
+  }
+};
+
+// src/agent/hermes/adapter.ts
+var HermesAdapter = class {
+  id = "hermes";
+  displayName = "Hermes Agent";
+  binary;
+  acpArgs;
+  larkChannel;
+  defaultStopGraceMs;
+  botIdentity;
+  constructor(opts = {}) {
+    this.binary = opts.binary ?? "hermes";
+    this.acpArgs = opts.acpArgs ?? [];
+    this.larkChannel = opts.larkChannel;
+    this.defaultStopGraceMs = opts.stopGraceMs ?? 5e3;
+  }
+  setBotIdentity(identity) {
+    this.botIdentity = identity;
+  }
+  async isAvailable() {
+    return (await this.checkAvailability()).ok;
+  }
+  async checkAvailability() {
+    return checkAgentAvailability({
+      agentId: "hermes",
+      agentName: "Hermes Agent",
+      command: this.binary,
+      binaryPath: this.binary
+    });
+  }
+  run(opts) {
+    if (!opts.cwd) {
+      throw new Error("cwd is required for HermesAdapter.run");
+    }
+    const args = [...this.acpArgs, "acp"];
+    log.info("agent", "spawn", {
+      binary: this.binary,
+      args,
+      cwd: opts.cwd,
+      hasSession: Boolean(opts.sessionId),
+      promptChars: opts.prompt.length,
+      model: opts.model
+    });
+    const child = new AcpConnection(this.binary, args);
+    const stderrChunks = [];
+    child.onStderr((chunk) => {
+      stderrChunks.push(chunk);
+      const text = chunk.toString("utf8").trim();
+      if (text) log.warn("agent", "stderr", { line: text.slice(0, 300) });
+    });
+    const stopGraceMs = opts.stopGraceMs ?? this.defaultStopGraceMs;
+    let stopReason;
+    return {
+      runId: opts.runId,
+      events: createEventStream5({
+        child,
+        cwd: opts.cwd,
+        prompt: prefixBridgeSystemPrompt(opts.prompt, this.botIdentity),
+        resumeSessionId: opts.sessionId,
+        stderrChunks,
+        getStopReason: () => stopReason
+      }),
+      async stop() {
+        if (child.exited) return;
+        stopReason = "interrupted";
+        log.info("agent", "stop-sigterm", { pid: child.pid ?? null, graceMs: stopGraceMs });
+        await child.stop().catch(() => void 0);
+        child.kill("SIGTERM");
+        await new Promise((resolve2) => {
+          const timer = setTimeout(() => {
+            if (!child.exited) {
+              log.warn("agent", "stop-sigkill", {
+                pid: child.pid ?? null,
+                graceMs: stopGraceMs,
+                reason: "grace-period-expired"
+              });
+              child.kill("SIGKILL");
+            }
+            resolve2();
+          }, stopGraceMs);
+          void child.waitForExit(stopGraceMs).then((exited) => {
+            if (exited) {
+              clearTimeout(timer);
+              resolve2();
+            }
+          });
+        });
+      },
+      waitForExit(timeoutMs) {
+        return child.waitForExit(timeoutMs);
+      }
+    };
+  }
+};
+async function* createEventStream5(ctx) {
+  const { child } = ctx;
+  if (!child.pid) {
+    yield {
+      type: "error",
+      message: `failed to spawn hermes acp (no pid)`,
+      terminationReason: "failed"
+    };
+    return;
+  }
+  let sessionId;
+  let finalText = "";
+  let terminalEmitted = false;
+  const emitError = (message) => ({
+    type: "error",
+    message,
+    terminationReason: "failed"
+  });
+  try {
+    await child.initialize();
+  } catch (err) {
+    yield emitError(`hermes acp initialize failed: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  try {
+    const info = await child.newSession(ctx.cwd, {
+      ...ctx.resumeSessionId ? { resumeSessionId: ctx.resumeSessionId } : {}
+    });
+    sessionId = info.sessionId;
+    yield { type: "system", sessionId, cwd: ctx.cwd };
+  } catch (err) {
+    yield emitError(`hermes session/new failed: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  let promptResult;
+  try {
+    const { updates, result } = await child.prompt(sessionId, ctx.prompt);
+    promptResult = result;
+    for (const update of updates) {
+      for (const ev of translateUpdate(update)) {
+        if (ev.type === "text") {
+          finalText += ev.delta;
+          continue;
+        }
+        yield ev;
+      }
+    }
+  } catch (err) {
+    if (ctx.getStopReason()) {
+      yield { type: "done", sessionId, terminationReason: "interrupted" };
+      terminalEmitted = true;
+    } else {
+      yield emitError(`hermes prompt failed: ${err instanceof Error ? err.message : String(err)}`);
+      terminalEmitted = true;
+    }
+  }
+  if (!terminalEmitted) {
+    const stopReason = ctx.getStopReason();
+    if (stopReason) {
+      yield { type: "done", sessionId, terminationReason: stopReason };
+    } else {
+      const usage = promptResult?.usage;
+      const events = [];
+      if (finalText.trim()) {
+        events.push({ type: "final_text", content: finalText });
+      }
+      if (usage) {
+        events.push({
+          type: "usage",
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: void 0
+        });
+      }
+      events.push({ type: "done", sessionId, terminationReason: "normal" });
+      yield* events;
+    }
+  }
+}
+function translateUpdate(update) {
+  const kind = update.sessionUpdate;
+  const events = [];
+  switch (kind) {
+    case "agent_thought_chunk": {
+      const text = update.content?.text;
+      if (text) events.push({ type: "thinking", delta: text });
+      break;
+    }
+    case "agent_message_chunk": {
+      const text = update.content?.text;
+      if (text) events.push({ type: "text", delta: text });
+      break;
+    }
+    case "tool_call": {
+      const id = String(update.toolCallId ?? "");
+      const name = String(update.kind ?? update.title ?? "tool");
+      const input = update.content;
+      if (id) events.push({ type: "tool_use", id, name, input });
+      break;
+    }
+    case "tool_call_update": {
+      const id = String(update.toolCallId ?? "");
+      if (id) {
+        const isError = update.status !== "completed";
+        const raw = update.content;
+        let output = "";
+        if (Array.isArray(raw)) {
+          output = raw.map((c) => {
+            if (!c || typeof c !== "object") return "";
+            const part = c;
+            const inner = part.content;
+            return String(inner?.text ?? "");
+          }).join("\n");
+        } else if (raw && typeof raw === "object") {
+          const obj = raw;
+          const inner = obj.content;
+          if (inner && typeof inner === "object") {
+            output = String(inner.text ?? "");
+          } else {
+            output = String(obj.text ?? "");
+          }
+        }
+        events.push({ type: "tool_result", id, output, isError });
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  return events;
+}
+
 // src/runtime/agent-runtime.ts
 function createRuntimeAgent(profileConfig, appPaths2) {
   const larkChannelConfigPath = appPaths2.configPath ?? appPaths2.configFile;
@@ -17860,6 +18290,17 @@ function createRuntimeAgent(profileConfig, appPaths2) {
       larkChannel
     });
   }
+  if (profileConfig.agentKind === "hermes") {
+    const hermes = profileConfig.hermes;
+    if (!hermes?.binaryPath) {
+      throw new Error("hermes profile requires hermes.binaryPath");
+    }
+    return new HermesAdapter({
+      binary: hermes.binaryPath,
+      acpArgs: hermes.acpArgs ?? [],
+      larkChannel
+    });
+  }
   return new ClaudeAdapter({ larkChannel });
 }
 async function checkRuntimeAgentAvailability(agent) {
@@ -17868,9 +18309,9 @@ async function checkRuntimeAgentAvailability(agent) {
   if (ok) return { ok: true };
   const diagnostic = {
     code: "agent-binary-not-found",
-    agentId: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : "claude",
+    agentId: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : agent.id === "hermes" ? "hermes" : "claude",
     agentName: agent.displayName,
-    command: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : "claude"
+    command: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : agent.id === "hermes" ? "hermes" : "claude"
   };
   return { ok: false, diagnostic, error: new AgentPreflightError(diagnostic) };
 }
@@ -18390,7 +18831,7 @@ async function confirmStopRuntimeLockProcess2(err) {
       `\u5F53\u524D ${err.kind === "profile" ? "profile" : "app"} \u5DF2\u6709 bridge \u8FDB\u7A0B\u5360\u7528\uFF1B\u975E\u4EA4\u4E92\u6A21\u5F0F\u65E0\u6CD5\u786E\u8BA4\u505C\u6B62\uFF0C\u8BF7\u5148\u7528 \`feishu-agent-bridge ps\` \u67E5\u770B\u5E76\u7528 \`feishu-agent-bridge kill <bot id>\` \u505C\u6B62\u540E\u91CD\u8BD5`
     );
   }
-  const rl = createInterface9({ input: process.stdin, output: process.stdout });
+  const rl = createInterface10({ input: process.stdin, output: process.stdout });
   try {
     const answer = (await new Promise(
       (resolve2) => rl.question("\u662F\u5426\u505C\u6B62\u65E7\u8FDB\u7A0B\u5E76\u91CD\u65B0\u542F\u52A8? [y/N]: ", resolve2)
@@ -18454,17 +18895,17 @@ function openBrowser(url) {
 // src/cli/index.ts
 var program = new Command();
 program.name("feishu-agent-bridge").description("Bridge Feishu/Lark messenger with local CLI coding agents").version(package_default.version, "-v, --version");
-program.command("run").description("Run the bridge in the foreground (was `start` in older versions)").option("-c, --config <path>", "path to config file").option("--profile <name>", "profile name to run").option("--web-ui", "run the machine-wide supervisor + local web console (hosts all profiles); default is a single-profile headless run").option("--agent <kind>", "agent kind for a new profile (claude, codex, mimo, or opencode)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
+program.command("run").description("Run the bridge in the foreground (was `start` in older versions)").option("-c, --config <path>", "path to config file").option("--profile <name>", "profile name to run").option("--web-ui", "run the machine-wide supervisor + local web console (hosts all profiles); default is a single-profile headless run").option("--agent <kind>", "agent kind for a new profile (claude, codex, mimo, opencode, or hermes)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
   await runStart(opts);
 });
-program.command("migrate").description("Migrate legacy bridge config/state into the current profile layout").option("-c, --config <path>", "path to config file").option("--profile <name>", "target profile name for legacy v1 config migration").option("--agent <kind>", "agent kind for legacy v1 profile migration (claude, codex, mimo, or opencode)").action(async (opts) => {
+program.command("migrate").description("Migrate legacy bridge config/state into the current profile layout").option("-c, --config <path>", "path to config file").option("--profile <name>", "target profile name for legacy v1 config migration").option("--agent <kind>", "agent kind for legacy v1 profile migration (claude, codex, mimo, opencode, or hermes)").action(async (opts) => {
   await runMigrate(opts);
 });
 var profile = program.command("profile").description("Manage local bridge profiles");
 profile.command("list").description("List configured profiles").action(async () => {
   await runProfileList();
 });
-profile.command("create <name>").description("Create a profile from QR registration or existing app credentials").option("--agent <kind>", "agent kind (claude, codex, mimo, or opencode)").option("--workspace <path>", "initial working directory for this profile").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").action(async (name, opts) => {
+profile.command("create <name>").description("Create a profile from QR registration or existing app credentials").option("--agent <kind>", "agent kind (claude, codex, mimo, opencode, or hermes)").option("--workspace <path>", "initial working directory for this profile").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").action(async (name, opts) => {
   await runProfileCreate(name, opts);
 });
 profile.command("use <name>").description("Set the active profile").action(async (name) => {
@@ -18490,7 +18931,7 @@ program.command("ps").description("List running bridge processes on this machine
 program.command("kill <target>").description("Kill a running bridge process by short id or list index (SIGTERM, then SIGKILL after 2s). Was `stop <target>` in older versions.").action(async (target) => {
   await runKillCli(target);
 });
-program.command("start").description("Install (if needed) and start the bridge as an OS-managed daemon").option("--profile <name>", "profile name (defaults to active profile)").option("--web-ui", "run the supervisor + web console as the background service (hosts all profiles) instead of a single profile").option("--agent <kind>", "agent kind for first-run profile bootstrap (claude, codex, mimo, or opencode)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
+program.command("start").description("Install (if needed) and start the bridge as an OS-managed daemon").option("--profile <name>", "profile name (defaults to active profile)").option("--web-ui", "run the supervisor + web console as the background service (hosts all profiles) instead of a single profile").option("--agent <kind>", "agent kind for first-run profile bootstrap (claude, codex, mimo, opencode, or hermes)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
   await runServiceStart(opts);
 });
 program.command("stop").description("Stop the OS-managed daemon and disable autostart (service definition stays)").option("--profile <name>", "profile name (defaults to active profile)").option("--web-ui", "target the supervisor service (auto-detected when no per-profile service exists)").action(async (opts) => {

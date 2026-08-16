@@ -2,6 +2,7 @@ import { ClaudeAdapter } from '../agent/claude/adapter';
 import { CodexAdapter } from '../agent/codex/adapter';
 import { MimoAdapter } from '../agent/mimo/adapter';
 import { OpencodeAdapter } from '../agent/opencode/adapter';
+import { HermesAdapter } from '../agent/hermes/adapter';
 import { AgentPreflightError, type AgentAvailability } from '../agent/preflight';
 import type { AgentAdapter } from '../agent/types';
 import type { AppPaths } from '../config/app-paths';
@@ -76,6 +77,17 @@ export function createRuntimeAgent(
       larkChannel,
     });
   }
+  if (profileConfig.agentKind === 'hermes') {
+    const hermes = profileConfig.hermes;
+    if (!hermes?.binaryPath) {
+      throw new Error('hermes profile requires hermes.binaryPath');
+    }
+    return new HermesAdapter({
+      binary: hermes.binaryPath,
+      acpArgs: hermes.acpArgs ?? [],
+      larkChannel,
+    });
+  }
   return new ClaudeAdapter({ larkChannel });
 }
 
@@ -85,9 +97,9 @@ export async function checkRuntimeAgentAvailability(agent: AgentAdapter): Promis
   if (ok) return { ok: true };
   const diagnostic = {
     code: 'agent-binary-not-found' as const,
-    agentId: agent.id === 'codex' ? ('codex' as const) : agent.id === 'mimo' ? ('mimo' as const) : agent.id === 'opencode' ? ('opencode' as const) : ('claude' as const),
+    agentId: agent.id === 'codex' ? ('codex' as const) : agent.id === 'mimo' ? ('mimo' as const) : agent.id === 'opencode' ? ('opencode' as const) : agent.id === 'hermes' ? ('hermes' as const) : ('claude' as const),
     agentName: agent.displayName,
-    command: agent.id === 'codex' ? 'codex' : agent.id === 'mimo' ? 'mimo' : agent.id === 'opencode' ? 'opencode' : 'claude',
+    command: agent.id === 'codex' ? 'codex' : agent.id === 'mimo' ? 'mimo' : agent.id === 'opencode' ? 'opencode' : agent.id === 'hermes' ? 'hermes' : 'claude',
   };
   return { ok: false, diagnostic, error: new AgentPreflightError(diagnostic) };
 }

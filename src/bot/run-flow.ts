@@ -120,7 +120,7 @@ export async function startRunFlow(input: StartRunFlowInput): Promise<StartRunFl
       cwdRealpath: workspace.cwdRealpath,
       policyFingerprint: policy.policyFingerprint,
     });
-    if (catalogEntry?.agentId === 'claude' || catalogEntry?.agentId === 'mimo' || catalogEntry?.agentId === 'opencode') {
+    if (catalogEntry?.agentId === 'claude' || catalogEntry?.agentId === 'mimo' || catalogEntry?.agentId === 'opencode' || catalogEntry?.agentId === 'hermes') {
       sessionId = catalogEntry.sessionId;
       resumeFrom = sessionId;
     } else if (catalogEntry?.agentId === 'codex') {

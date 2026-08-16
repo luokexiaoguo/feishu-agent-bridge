@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute } from 'node:path';
 import type { LarkChannel, NormalizedMessage } from '@larksuite/channel';
-import { claudeCapability, codexCapability, mimoCapability, opencodeCapability } from '../agent/capability';
+import { claudeCapability, codexCapability, mimoCapability, opencodeCapability, hermesCapability } from '../agent/capability';
 import type { AgentCapabilityId } from '../agent/capability';
 import { DEFAULT_MODEL, normalizeModelSelection, supportedModels } from '../agent/models';
 import type { AgentAdapter } from '../agent/types';
@@ -731,7 +731,8 @@ function consumeResumeCandidate(
     (identity.agentId === 'claude' && !candidate.sessionId) ||
     (identity.agentId === 'codex' && !candidate.threadId) ||
     (identity.agentId === 'mimo' && !candidate.sessionId) ||
-    (identity.agentId === 'opencode' && !candidate.sessionId)
+    (identity.agentId === 'opencode' && !candidate.sessionId) ||
+    (identity.agentId === 'hermes' && !candidate.sessionId)
   ) {
     return undefined;
   }
@@ -1165,7 +1166,9 @@ async function handleDoctor(args: string, ctx: CommandContext): Promise<void> {
         ? mimoCapability(ctx.controls.profileConfig)
         : ctx.controls.profileConfig.agentKind === 'opencode'
           ? opencodeCapability(ctx.controls.profileConfig)
-          : claudeCapability(ctx.controls.profileConfig);
+          : ctx.controls.profileConfig.agentKind === 'hermes'
+            ? hermesCapability(ctx.controls.profileConfig)
+            : claudeCapability(ctx.controls.profileConfig);
   const policy = evaluateRunPolicy({
     scope: {
       source: 'im',
