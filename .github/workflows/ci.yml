@@ -11,7 +11,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, ubuntu-latest]
+        # Windows is excluded: the daemon tests are launchd/systemd-centric
+        # (upstream launchd-autostart tests are platform-sensitive on win32).
 
     steps:
       - name: Checkout
