@@ -908,9 +908,11 @@ async function handleModel(args: string, ctx: CommandContext): Promise<void> {
       ctx.controls.profileConfig.larkCli.identityPreset,
       ctx.controls.profileConfig.mode,
     );
-    if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
     const label = agentKind === 'openclaw' ? modelSelection : modelLabel(agentKind, modelSelection);
+    // Reply first, then recall the old card — replying to a withdrawn message
+    // fails with "The message was withdrawn".
     await reply(ctx, `✅ 模型已切换为 \`${label}\``);
+    if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
     return;
   }
   if (sub === 'cancel') {

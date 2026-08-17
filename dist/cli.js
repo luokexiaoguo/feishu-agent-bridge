@@ -7215,6 +7215,7 @@ function isDefaultModel(value) {
 }
 function normalizeModelSelection(agentKind, value) {
   if (isDefaultModel(value)) return DEFAULT_MODEL;
+  if (agentKind === "openclaw" && typeof value === "string" && value.trim() !== "") return value;
   return supportedModels(agentKind).some((m) => m.value === value) ? value : DEFAULT_MODEL;
 }
 function resolveModelArg(agentKind, value) {
@@ -10751,9 +10752,9 @@ async function handleModel(args, ctx) {
       ctx.controls.profileConfig.larkCli.identityPreset,
       ctx.controls.profileConfig.mode
     );
-    if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
     const label = agentKind2 === "openclaw" ? modelSelection : modelLabel(agentKind2, modelSelection);
     await reply(ctx, `\u2705 \u6A21\u578B\u5DF2\u5207\u6362\u4E3A \`${label}\``);
+    if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
     return;
   }
   if (sub === "cancel") {

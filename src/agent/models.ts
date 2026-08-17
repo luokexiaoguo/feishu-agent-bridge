@@ -102,6 +102,9 @@ export function normalizeModelSelection(
   value: string | undefined,
 ): string {
   if (isDefaultModel(value)) return DEFAULT_MODEL;
+  // openclaw accepts any configured model id (the live list from `openclaw
+  // models` is dynamic; the static catalog is only a fallback).
+  if (agentKind === 'openclaw' && typeof value === 'string' && value.trim() !== '') return value;
   return supportedModels(agentKind).some((m) => m.value === value)
     ? (value as string)
     : DEFAULT_MODEL;
