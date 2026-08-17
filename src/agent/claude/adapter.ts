@@ -21,6 +21,8 @@ import { createTranslateEvent } from './stream-json';
 export interface ClaudeAdapterOptions {
   binary?: string;
   larkChannel?: LarkChannelEnvContext;
+  /** `--autocompact` value ('auto' | 'tokens'); default 'auto'. */
+  autocompact?: 'auto' | 'tokens';
 }
 
 type ClaudeChild = SpawnedProcessByStdio<Writable, Readable, Readable>;
@@ -31,11 +33,13 @@ export class ClaudeAdapter implements AgentAdapter {
 
   private readonly binary: string;
   private readonly larkChannel: LarkChannelEnvContext | undefined;
+  private readonly autocompact: 'auto' | 'tokens' | undefined;
   private botIdentity: AgentBotIdentity | undefined;
 
   constructor(opts: ClaudeAdapterOptions = {}) {
     this.binary = opts.binary ?? 'claude';
     this.larkChannel = opts.larkChannel;
+    this.autocompact = opts.autocompact;
   }
 
   setBotIdentity(identity: AgentBotIdentity): void {
@@ -82,6 +86,10 @@ export class ClaudeAdapter implements AgentAdapter {
       opts.permissionMode ?? CLAUDE_DEFAULT_PERMISSION_MODE,
       '--append-system-prompt-file',
       systemPromptFile.path,
+      // Auto-compact long contexts (there is no manual /compact in headless
+      // mode; --autocompact auto keeps long sessions usable).
+      '--autocompact',
+      this.autocompact ?? 'auto',
     ];
     if (opts.sessionId) args.push('--resume', opts.sessionId);
     if (opts.model) args.push('--model', opts.model);

@@ -6286,10 +6286,12 @@ var ClaudeAdapter = class {
   displayName = "Claude Code";
   binary;
   larkChannel;
+  autocompact;
   botIdentity;
   constructor(opts = {}) {
     this.binary = opts.binary ?? "claude";
     this.larkChannel = opts.larkChannel;
+    this.autocompact = opts.autocompact;
   }
   setBotIdentity(identity) {
     this.botIdentity = identity;
@@ -6321,7 +6323,11 @@ var ClaudeAdapter = class {
       "--permission-mode",
       opts.permissionMode ?? CLAUDE_DEFAULT_PERMISSION_MODE,
       "--append-system-prompt-file",
-      systemPromptFile.path
+      systemPromptFile.path,
+      // Auto-compact long contexts (there is no manual /compact in headless
+      // mode; --autocompact auto keeps long sessions usable).
+      "--autocompact",
+      this.autocompact ?? "auto"
     ];
     if (opts.sessionId) args.push("--resume", opts.sessionId);
     if (opts.model) args.push("--model", opts.model);
