@@ -51,6 +51,9 @@ const CODEX_MODELS: ModelOption[] = [
 const MIMO_MODELS: ModelOption[] = [
   { value: DEFAULT_MODEL, label: '跟随默认（不指定）' },
   { value: 'mimo-auto', label: 'MiMo Auto（自动路由）' },
+  // user's real-world choices (provider/model format passed to --model)
+  { value: 'newapi/deepseek-v4-flash', label: 'newapi · deepseek-v4-flash' },
+  { value: 'newapi/deepseek-v4-pro', label: 'newapi · deepseek-v4-pro' },
 ];
 
 /** OpenCode models. Forwarded to `opencode run --model`. */

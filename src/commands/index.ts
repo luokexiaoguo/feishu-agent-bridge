@@ -177,6 +177,9 @@ const handlers: Record<string, Handler> = {
   '/help': handleHelp,
   '/account': handleAccount,
   '/config': handleConfig,
+  // /model opens the config form whose model selector switches the model
+  // (lcb has no standalone model picker; dsh-lark-style alias for UX).
+  '/model': handleConfig,
   '/stop': handleStop,
   '/timeout': handleTimeout,
   '/ps': handlePs,
@@ -197,6 +200,7 @@ const handlers: Record<string, Handler> = {
 const ADMIN_COMMANDS = new Set([
   '/account',
   '/config',
+  '/model',
   '/ps',
   '/exit',
   '/reconnect',

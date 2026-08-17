@@ -109,6 +109,15 @@ export class CotClient {
 
   async update(ref: CotRef, events: readonly CotEvent[]): Promise<void> {
     if (events.length === 0) return;
+    // DIAG: dump real requests for byte-level comparison with dsh-lark.
+    try {
+      fs.appendFileSync(
+        process.env.HOME + '/.lark-channel/lcb-cot-dump.log',
+        JSON.stringify({ t: Date.now(), op: 'update', cot_id: ref.cotId, message_id: ref.messageId, events }) + '\n',
+      );
+    } catch {
+      /* diag only */
+    }
     await this.request('/open-apis/im/v1/message_cot', {
       method: 'PUT',
       body: JSON.stringify({

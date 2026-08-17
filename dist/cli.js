@@ -7119,7 +7119,10 @@ var CODEX_MODELS = [
 ];
 var MIMO_MODELS = [
   { value: DEFAULT_MODEL, label: "\u8DDF\u968F\u9ED8\u8BA4\uFF08\u4E0D\u6307\u5B9A\uFF09" },
-  { value: "mimo-auto", label: "MiMo Auto\uFF08\u81EA\u52A8\u8DEF\u7531\uFF09" }
+  { value: "mimo-auto", label: "MiMo Auto\uFF08\u81EA\u52A8\u8DEF\u7531\uFF09" },
+  // user's real-world choices (provider/model format passed to --model)
+  { value: "newapi/deepseek-v4-flash", label: "newapi \xB7 deepseek-v4-flash" },
+  { value: "newapi/deepseek-v4-pro", label: "newapi \xB7 deepseek-v4-pro" }
 ];
 var OPENCODE_MODELS = [
   { value: DEFAULT_MODEL, label: "\u8DDF\u968F\u9ED8\u8BA4\uFF08\u4E0D\u6307\u5B9A\uFF09" },
@@ -10018,6 +10021,9 @@ var handlers = {
   "/help": handleHelp,
   "/account": handleAccount,
   "/config": handleConfig,
+  // /model opens the config form whose model selector switches the model
+  // (lcb has no standalone model picker; dsh-lark-style alias for UX).
+  "/model": handleConfig,
   "/stop": handleStop,
   "/timeout": handleTimeout,
   "/ps": handlePs,
@@ -10032,6 +10038,7 @@ var handlers = {
 var ADMIN_COMMANDS = /* @__PURE__ */ new Set([
   "/account",
   "/config",
+  "/model",
   "/ps",
   "/exit",
   "/reconnect",
@@ -13845,6 +13852,13 @@ var CotClient = class {
   }
   async update(ref, events) {
     if (events.length === 0) return;
+    try {
+      fs.appendFileSync(
+        process.env.HOME + "/.lark-channel/lcb-cot-dump.log",
+        JSON.stringify({ t: Date.now(), op: "update", cot_id: ref.cotId, message_id: ref.messageId, events }) + "\n"
+      );
+    } catch {
+    }
     await this.request("/open-apis/im/v1/message_cot", {
       method: "PUT",
       body: JSON.stringify({
