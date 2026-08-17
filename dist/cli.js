@@ -11357,7 +11357,7 @@ async function handleConfig(args, ctx) {
     case "cancel":
       return cancelConfig(ctx);
     default:
-      await reply(ctx, "\u7528\u6CD5:`/config`");
+      return showConfigForm(ctx);
   }
 }
 async function showConfigForm(ctx) {

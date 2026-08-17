@@ -1761,7 +1761,10 @@ async function handleConfig(args: string, ctx: CommandContext): Promise<void> {
     case 'cancel':
       return cancelConfig(ctx);
     default:
-      await reply(ctx, '用法:`/config`');
+      // /model is an alias for handleConfig; unknown sub-commands still
+      // open the form (users may type "/model <model>" expecting a direct
+      // switch, which the form handles).
+      return showConfigForm(ctx);
   }
 }
 
