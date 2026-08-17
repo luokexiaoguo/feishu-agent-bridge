@@ -7843,67 +7843,59 @@ function modelPickerCard(opts) {
     value: m.value
   }));
   return {
-    config: { wide_screen_mode: true },
-    header: {
-      title: { tag: "plain_text", content: "\u5207\u6362\u6A21\u578B" }
-    },
-    elements: [
-      {
-        tag: "markdown",
-        content: `\u5F53\u524D\u6A21\u578B\uFF1A\`${modelLabel(opts.agentKind, opts.model)}\``
-      },
-      { tag: "hr" },
-      {
-        tag: "column_set",
-        columns: [
-          {
-            tag: "column",
-            width: "weighted",
-            weight: 1,
-            elements: [
-              {
-                tag: "select_static",
-                name: "model",
-                initial_option: opts.model,
-                options
-              }
-            ]
-          }
-        ]
-      },
-      { tag: "hr" },
-      {
-        tag: "column_set",
-        columns: [
-          {
-            tag: "column",
-            width: "auto",
-            elements: [
-              {
-                tag: "button",
-                name: "submit_btn",
-                text: { tag: "plain_text", content: "\u5207\u6362" },
-                type: "primary",
-                form_action_type: "submit",
-                behaviors: [{ type: "callback", value: { cmd: "model.submit" } }]
-              }
-            ]
-          },
-          {
-            tag: "column",
-            width: "auto",
-            elements: [
-              {
-                tag: "button",
-                name: "cancel_btn",
-                text: { tag: "plain_text", content: "\u53D6\u6D88" },
-                behaviors: [{ type: "callback", value: { cmd: "model.cancel" } }]
-              }
-            ]
-          }
-        ]
-      }
-    ]
+    schema: "2.0",
+    config: { summary: { content: "\u5207\u6362\u6A21\u578B" } },
+    body: {
+      elements: [
+        {
+          tag: "markdown",
+          content: `\u5F53\u524D\u6A21\u578B\uFF1A\`${modelLabel(opts.agentKind, opts.model)}\``
+        },
+        { tag: "hr" },
+        {
+          tag: "markdown",
+          content: "_\u5E95\u5C42 agent \u8FD0\u884C\u4F7F\u7528\u7684\u6A21\u578B_\n_\u300C\u8DDF\u968F\u9ED8\u8BA4\u300D= \u4E0D\u6307\u5B9A\uFF0C\u7531 CLI / \u8D26\u53F7\u51B3\u5B9A_"
+        },
+        {
+          tag: "select_static",
+          name: "model",
+          initial_option: opts.model,
+          options
+        },
+        { tag: "hr" },
+        {
+          tag: "column_set",
+          columns: [
+            {
+              tag: "column",
+              width: "auto",
+              elements: [
+                {
+                  tag: "button",
+                  name: "submit_btn",
+                  text: { tag: "plain_text", content: "\u5207\u6362" },
+                  type: "primary",
+                  form_action_type: "submit",
+                  behaviors: [{ type: "callback", value: { cmd: "model.submit" } }]
+                }
+              ]
+            },
+            {
+              tag: "column",
+              width: "auto",
+              elements: [
+                {
+                  tag: "button",
+                  name: "cancel_btn",
+                  text: { tag: "plain_text", content: "\u53D6\u6D88" },
+                  behaviors: [{ type: "callback", value: { cmd: "model.cancel" } }]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
   };
 }
 
