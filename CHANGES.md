@@ -2,7 +2,27 @@
 
 > 2026-08-16 由 DSH-lark 基于 lark-channel-bridge v0.7.0 源码改造，目标：修复「长回复容易嘎」的缺陷，对齐 dsh-lark-channel 的稳定性（长连接不断线、进行中的 run 不被误杀）。
 > 传输层不变：仍基于 `@larksuite/channel`（WebSocket 长连接，与 dsh-lark-channel 同源）。
-> 2026-08-17 CLI 更名为 `feishu-agent-bridge`（自有品牌）；新增 OpenCode 适配器。
+> 2026-08-17 CLI 更名为 `feishu-agent-bridge`（自有品牌）；新增 OpenCode / OpenClaw / Hermes 适配器。
+
+## 新增适配器：OpenClaw（2026-08-17）
+
+- 新 `agentKind: 'openclaw'`，`src/agent/openclaw/`（adapter + argv），走 `openclaw agent --json` 单轮模式（spawn `openclaw agent --agent <id> -m <prompt> --json`，解析 result.payloads 为最终答案）。
+- 现状：`agent --json` 只返回最终文本（无流式推理/工具事件）→ cot 气泡显示最终答案（无思考区/工具区）。完整流式需 ACP 路线（`openclaw acp`，与 hermes 同协议，需 gateway scope 审批，待后续）。
+- 配置示例：
+  ```jsonc
+  { "profiles": { "openclaw-test": {
+      "agentKind": "openclaw",
+      "openclaw": { "binaryPath": "/path/to/openclaw", "agentId": "main" },
+      "preferences": { "cotMessages": "on" }
+  } } }
+  ```
+- 真实冒烟通过（spawn openclaw agent → 最终文本解析正常）。
+
+## 待办增强（排期，未实现）
+
+- **敏感操作确认卡片**：把 agent 的高危操作（如危险命令）转发为飞书确认卡片，用户点按钮批准/拒绝（参照 dsh-lark 的审批卡片）。
+- **每群自定义 system prompt**：per-chat 覆盖 agent 的系统提示词（高级群配置，参照 openclaw-lark 的 group settings）。
+
 
 ## 新增适配器：OpenCode（2026-08-17）
 
