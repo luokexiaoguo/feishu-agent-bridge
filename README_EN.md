@@ -154,20 +154,44 @@ Agent capabilities are gated by the `"permissions"` block instead of the legacy 
 - **CoT (recommended)**: a native `message_cot` thinking bubble appears immediately — collapsible, with reasoning and tool calls streaming in — and the final answer is delivered as a plain message. No redundant "thinking…" placeholder.
 - **Non-CoT**: markdown typewriter card or plain text, per `messageReply`.
 
-## 🎛️ Commands
+## 🎛️ Commands (slash commands, press Enter to run)
 
-| Command | Purpose |
-| --- | --- |
-| `/help` `/status` | Help / status (context & token usage) |
-| `/new` | New session in place (clear context) |
-| `/stop` | Stop the current run |
-| `/cd <path>` `/ws` | Switch / manage workspaces |
-| `/model` | Model picker card |
-| `/config` | Live preference toggles (CoT mode, tool display, …) |
-| `/invite user` `/invite group` `/invite all group` | Invite the bot into chats / groups |
-| `/remove user` `/remove group` | Remove users / groups |
-| `/reconnect` `/exit` | Reconnect / exit (`/reconnect --wait` waits for the current run) |
-| `/doctor` | Self-diagnostics (connection, agent, sessions) |
+### ⚙️ Preferences
+- `/config` — Form: reply mode, tool display, concurrency cap, @mention requirement
+- `/model` — Open config form to switch model (Claude / MiMo / OpenCode / OpenClaw catalog)
+- `/timeout` — Run idle timeout: `/timeout 15` (15 min auto-kill), `/timeout off`, `/timeout default`
+- `/account` — View current app; `/account change` hot-swap appId / secret
+
+### 🗂️ Sessions
+- `/new` (or `/reset`) — Clear the current session
+- `/new chat [name]` — Create a new group chat (auto-invites you + bot), inherits current cwd
+- `/resume [N]` — List recent N sessions, restore with one click
+- `/status` — Current cwd / session / agent status card
+- `/help` — Command cheat sheet card
+
+### 📁 Workspace & Working Directory
+- `/cd <path>` — Switch working directory (resets session)
+- `/ws list` — List all named workspaces (card + buttons)
+- `/ws save <name>` — Save the current cwd as a named workspace
+- `/ws use <name>` — Switch to a named workspace
+- `/ws remove <name>` — Delete a named workspace
+
+### ⏹️ Run Control
+- `/stop` — Stop the current run (same as the ⏹ button)
+- `/reconnect` — Force WebSocket reconnect (use after a network hiccup)
+
+### 🧭 Process Management
+- `/ps` — List all local bot processes, highlight the one replying
+- `/exit <id|#>` — Terminate a process (self = graceful exit; other = SIGTERM)
+
+### 🩺 Diagnostics
+- `/doctor [description]` — Feed recent logs + your issue description to the agent for self-diagnosis
+
+### 📎 Other
+- `/doc` — Create / update Feishu docs
+- `/invite user` `/invite group` `/invite all group` — Invite the bot into chats / groups
+- `/remove user` `/remove group` — Remove users / groups
+- `/meeting` — Meeting management
 
 ## 🧩 What this fork fixes (vs upstream v0.7.0)
 

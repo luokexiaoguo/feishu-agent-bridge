@@ -154,20 +154,44 @@ Agent 能力使用 `"permissions"` 配置（双档），替代已废弃的旧版
 - **cot（推荐）**：消息到达后立即出现原生 `message_cot` 思考气泡——可折叠展开，推理与工具调用流式刷入，最终答案以普通消息发出，没有多余的"正在思考"占位消息。
 - **非 cot**：按 `messageReply` 使用 markdown 打字机卡片或纯文本。
 
-## 🎛️ 命令
+## 🎛️ 快捷指令（斜杠命令，回车即生效）
 
-| 命令 | 用途 |
-| --- | --- |
-| `/help` `/status` | 帮助 / 状态（含上下文与 token 用量） |
-| `/new` | 原地重开新会话（清空上下文） |
-| `/stop` | 停止当前任务 |
-| `/cd <path>` `/ws` | 切换 / 管理工作区 |
-| `/model` | 模型选择卡片 |
-| `/config` | 实时调整偏好（cot 模式、工具显示等） |
-| `/invite user` `/invite group` `/invite all group` | 邀请机器人进群协作 |
-| `/remove user` `/remove group` | 移出用户 / 群 |
-| `/reconnect` `/exit` | 重连 / 退出（`/reconnect --wait` 等当前 run 结束再重连） |
-| `/doctor` | 自检（连接、agent、会话健康） |
+### ⚙️ 偏好设置
+- `/config` — 表单调整：消息回复方式、工具调用是否显示、并发上限、群内是否需要 @bot 才回复
+- `/model` — 打开配置表单切换模型（Claude / MiMo / OpenCode / OpenClaw 各自模型列表）
+- `/timeout` — 当前 session 的 run 探活：`/timeout 15`（15 分钟无响应自动 kill）、`/timeout off`、`/timeout default`
+- `/account` — 查看当前应用；`/account change` 换 appId / secret 并热重连
+
+### 🗂️ 会话管理
+- `/new`（或 `/reset`）— 清空当前会话，从零开始
+- `/new chat [名字]` — 新建一个群（自动拉你和 bot 进去），继承当前 cwd 后开新会话
+- `/resume [N]` — 列出最近 N 个历史会话，点按钮一键恢复
+- `/status` — 当前 cwd / session / agent 状态卡片
+- `/help` — 命令速查卡片
+
+### 📁 工作目录 & 工作空间
+- `/cd <路径>` — 切换工作目录（会重置 session）
+- `/ws list` — 列出所有命名工作空间（卡片 + 按钮）
+- `/ws save <名字>` — 把当前 cwd 存为命名工作空间
+- `/ws use <名字>` — 切到指定命名工作空间
+- `/ws remove <名字>` — 删除命名工作空间
+
+### ⏹️ 运行控制
+- `/stop` — 终止当前正在跑的任务（等同卡片底部 ⏹ 按钮）
+- `/reconnect` — 强制重连 WebSocket（网络抖动后 bot 没反应时用）
+
+### 🧭 进程管理
+- `/ps` — 列出本机所有 bot 进程，标识当前回复的是哪个
+- `/exit <id|#>` — 终止指定进程（关自己 = 优雅退出；关别人 = SIGTERM）
+
+### 🩺 诊断
+- `/doctor [描述]` — 把最近日志 + 你的故障描述喂给 Agent 自助诊断，返回可能原因 / 关键日志 / 建议
+
+### 📎 其他
+- `/doc` — 创建/更新飞书文档
+- `/invite user` `/invite group` `/invite all group` — 邀请机器人进群协作
+- `/remove user` `/remove group` — 移出用户 / 群
+- `/meeting` — 会议管理
 
 ## 🧩 相对上游 v0.7.0 的修复
 
