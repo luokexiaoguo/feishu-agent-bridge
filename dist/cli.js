@@ -7836,6 +7836,77 @@ function forgetManagedCard(messageId) {
   byMessageId.delete(messageId);
 }
 
+// src/card/model-card.ts
+function modelPickerCard(opts) {
+  const options = supportedModels(opts.agentKind).map((m) => ({
+    text: { tag: "plain_text", content: m.label },
+    value: m.value
+  }));
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: "plain_text", content: "\u5207\u6362\u6A21\u578B" }
+    },
+    elements: [
+      {
+        tag: "markdown",
+        content: `\u5F53\u524D\u6A21\u578B\uFF1A\`${modelLabel(opts.agentKind, opts.model)}\``
+      },
+      { tag: "hr" },
+      {
+        tag: "column_set",
+        columns: [
+          {
+            tag: "column",
+            width: "weighted",
+            weight: 1,
+            elements: [
+              {
+                tag: "select_static",
+                name: "model",
+                initial_option: opts.model,
+                options
+              }
+            ]
+          }
+        ]
+      },
+      { tag: "hr" },
+      {
+        tag: "column_set",
+        columns: [
+          {
+            tag: "column",
+            width: "auto",
+            elements: [
+              {
+                tag: "button",
+                name: "submit_btn",
+                text: { tag: "plain_text", content: "\u5207\u6362" },
+                type: "primary",
+                form_action_type: "submit",
+                behaviors: [{ type: "callback", value: { cmd: "model.submit" } }]
+              }
+            ]
+          },
+          {
+            tag: "column",
+            width: "auto",
+            elements: [
+              {
+                tag: "button",
+                name: "cancel_btn",
+                text: { tag: "plain_text", content: "\u53D6\u6D88" },
+                behaviors: [{ type: "callback", value: { cmd: "model.cancel" } }]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+}
+
 // src/card/templates.ts
 function button(spec) {
   return {
@@ -10093,7 +10164,7 @@ var handlers = {
   "/config": handleConfig,
   // /model opens the config form whose model selector switches the model
   // (lcb has no standalone model picker; dsh-lark-style alias for UX).
-  "/model": handleConfig,
+  "/model": handleModel,
   "/stop": handleStop,
   "/timeout": handleTimeout,
   "/ps": handlePs,
@@ -10661,6 +10732,42 @@ function formatOwnerState(ctx) {
   const owner = ctx.controls.botOwnerId ? "present" : "missing";
   const refreshed = ctx.controls.ownerRefreshedAt ? ` refreshed=${new Date(ctx.controls.ownerRefreshedAt).toISOString()}` : "";
   return `${state} owner=${owner}${refreshed}`;
+}
+async function handleModel(args, ctx) {
+  const sub = args.trim().split(/\s+/)[0] ?? "";
+  if (sub === "submit") {
+    const fv = ctx.formValue ?? {};
+    const agentKind = ctx.controls.profileConfig.agentKind;
+    const rawModel = String(fv.model ?? "").trim();
+    const modelValid = rawModel !== "" && supportedModels(agentKind).some((m) => m.value === rawModel);
+    const modelSelection = modelValid ? rawModel : normalizeModelSelection(agentKind, ctx.controls.cfg.preferences?.model);
+    const model = modelSelection === DEFAULT_MODEL ? void 0 : modelSelection;
+    const nextPreferences = {
+      ...ctx.controls.cfg.preferences ?? {},
+      model
+    };
+    await savePreferencesConfig2(
+      ctx,
+      nextPreferences,
+      getRequireMentionInGroup(ctx.controls.cfg),
+      ctx.controls.profileConfig.larkCli.identityPreset,
+      ctx.controls.profileConfig.mode
+    );
+    if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
+    await reply(ctx, `\u2705 \u6A21\u578B\u5DF2\u5207\u6362\u4E3A \`${modelLabel(agentKind, modelSelection)}\``);
+    return;
+  }
+  if (sub === "cancel") {
+    if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
+    await reply(ctx, "\u274C \u5DF2\u53D6\u6D88");
+    return;
+  }
+  const card = modelPickerCard({
+    agentKind: ctx.controls.profileConfig.agentKind,
+    model: normalizeModelSelection(ctx.controls.profileConfig.agentKind, ctx.controls.cfg.preferences?.model)
+  });
+  if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
+  await sendManagedCard(ctx.channel, ctx.msg.chatId, card, commandReplyOptions(ctx));
 }
 async function handleStop(args, ctx) {
   const targetScope = args.trim();

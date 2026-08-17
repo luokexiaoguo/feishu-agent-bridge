@@ -5,7 +5,7 @@ import { dirname, isAbsolute } from 'node:path';
 import type { LarkChannel, NormalizedMessage } from '@larksuite/channel';
 import { claudeCapability, codexCapability, mimoCapability, opencodeCapability, hermesCapability, openclawCapability } from '../agent/capability';
 import type { AgentCapabilityId } from '../agent/capability';
-import { DEFAULT_MODEL, normalizeModelSelection, supportedModels } from '../agent/models';
+import { DEFAULT_MODEL, modelLabel, normalizeModelSelection, supportedModels } from '../agent/models';
 import type { AgentAdapter } from '../agent/types';
 import type { ActiveRuns } from '../bot/active-runs';
 import {
@@ -25,6 +25,7 @@ import {
 import { GROUP_MSG_SCOPE, hasGroupMsgScope } from '../bot/app-scope';
 import { requestScopeGrantLink } from '../bot/wizard';
 import { forgetManagedCard, sendManagedCard, updateManagedCard } from '../card/managed';
+import { modelPickerCard } from '../card/model-card';
 import { helpCard, resumeCard, statusCard, workspacesCard } from '../card/templates';
 import type { AppConfig, AppPreferences, MessageReplyMode, TenantBrand } from '../config/schema';
 import {
@@ -179,7 +180,7 @@ const handlers: Record<string, Handler> = {
   '/config': handleConfig,
   // /model opens the config form whose model selector switches the model
   // (lcb has no standalone model picker; dsh-lark-style alias for UX).
-  '/model': handleConfig,
+  '/model': handleModel,
   '/stop': handleStop,
   '/timeout': handleTimeout,
   '/ps': handlePs,
@@ -881,6 +882,47 @@ function formatOwnerState(ctx: CommandContext): string {
     ? ` refreshed=${new Date(ctx.controls.ownerRefreshedAt).toISOString()}`
     : '';
   return `${state} owner=${owner}${refreshed}`;
+}
+
+async function handleModel(args: string, ctx: CommandContext): Promise<void> {
+  const sub = args.trim().split(/\s+/)[0] ?? '';
+  if (sub === 'submit') {
+    // Card callback: save the selected model.
+    const fv = ctx.formValue ?? {};
+    const agentKind = ctx.controls.profileConfig.agentKind;
+    const rawModel = String(fv.model ?? '').trim();
+    const modelValid = rawModel !== '' && supportedModels(agentKind).some((m) => m.value === rawModel);
+    const modelSelection = modelValid
+      ? rawModel
+      : normalizeModelSelection(agentKind, ctx.controls.cfg.preferences?.model);
+    const model = modelSelection === DEFAULT_MODEL ? undefined : modelSelection;
+    const nextPreferences: AppPreferences = {
+      ...(ctx.controls.cfg.preferences ?? {}),
+      model,
+    };
+    await savePreferencesConfig(
+      ctx,
+      nextPreferences,
+      getRequireMentionInGroup(ctx.controls.cfg),
+      ctx.controls.profileConfig.larkCli.identityPreset,
+      ctx.controls.profileConfig.mode,
+    );
+    if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
+    await reply(ctx, `✅ 模型已切换为 \`${modelLabel(agentKind, modelSelection)}\``);
+    return;
+  }
+  if (sub === 'cancel') {
+    if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
+    await reply(ctx, '❌ 已取消');
+    return;
+  }
+  // Show the model picker card.
+  const card = modelPickerCard({
+    agentKind: ctx.controls.profileConfig.agentKind,
+    model: normalizeModelSelection(ctx.controls.profileConfig.agentKind, ctx.controls.cfg.preferences?.model),
+  });
+  if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
+  await sendManagedCard(ctx.channel, ctx.msg.chatId, card, commandReplyOptions(ctx));
 }
 
 async function handleStop(args: string, ctx: CommandContext): Promise<void> {
