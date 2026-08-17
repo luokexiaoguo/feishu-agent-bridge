@@ -223,6 +223,13 @@ export async function resolveProfileRuntime(
     workspace,
     defaultWorkspace: appPaths.defaultWorkspaceDir,
     profileDir: appPaths.profileDir,
+    // openclaw needs a working config at bootstrap time.
+    ...(bootstrapAgent === 'openclaw'
+      ? {
+          openclawBinaryPath: process.env.LARK_CHANNEL_OPENCLAW_BIN ?? 'openclaw',
+          openclawAgentId: process.env.LARK_CHANNEL_OPENCLAW_AGENT ?? 'main',
+        }
+      : {}),
   });
   const root = createRootConfig(profile, profileConfig, encrypted.secrets);
   await saveRootConfig(root, configPath);
@@ -252,6 +259,13 @@ async function bootstrapProfileIntoExistingRoot(args: {
     workspace,
     defaultWorkspace: appPaths.defaultWorkspaceDir,
     profileDir: appPaths.profileDir,
+    // openclaw needs a working config at bootstrap time.
+    ...(bootstrapAgent === 'openclaw'
+      ? {
+          openclawBinaryPath: process.env.LARK_CHANNEL_OPENCLAW_BIN ?? 'openclaw',
+          openclawAgentId: process.env.LARK_CHANNEL_OPENCLAW_AGENT ?? 'main',
+        }
+      : {}),
   });
   const nextRoot: RootConfig = {
     ...rootConfig,

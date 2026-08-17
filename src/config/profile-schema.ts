@@ -366,6 +366,7 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
     ...(raw.opencode ? { opencode: normalizeOpencode(raw.opencode) } : {}),
     ...(raw.hermes ? { hermes: normalizeHermes(raw.hermes) } : {}),
     ...(raw.openclaw ? { openclaw: normalizeOpenClaw(raw.openclaw) } : {}),
+    ...(raw.openclaw ? { openclaw: normalizeOpenClaw(raw.openclaw) } : {}),
     attachments: {
       maxCount: numberOr(raw.attachments?.maxCount, 10),
       maxBytes: numberOr(raw.attachments?.maxBytes, 100 * 1024 * 1024),

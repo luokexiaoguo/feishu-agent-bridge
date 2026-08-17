@@ -638,6 +638,7 @@ function normalizeProfileConfig(input) {
     ...raw.opencode ? { opencode: normalizeOpencode(raw.opencode) } : {},
     ...raw.hermes ? { hermes: normalizeHermes(raw.hermes) } : {},
     ...raw.openclaw ? { openclaw: normalizeOpenClaw(raw.openclaw) } : {},
+    ...raw.openclaw ? { openclaw: normalizeOpenClaw(raw.openclaw) } : {},
     attachments: {
       maxCount: numberOr(raw.attachments?.maxCount, 10),
       maxBytes: numberOr(raw.attachments?.maxBytes, 100 * 1024 * 1024),
@@ -2294,6 +2295,7 @@ function serializeProfileConfig(profile2) {
     ...profile2.mimo ? { mimo: profile2.mimo } : {},
     ...profile2.opencode ? { opencode: profile2.opencode } : {},
     ...profile2.hermes ? { hermes: profile2.hermes } : {},
+    ...profile2.openclaw ? { openclaw: profile2.openclaw } : {},
     attachments: profile2.attachments,
     comments: {},
     meeting: profile2.meeting,
@@ -4369,7 +4371,12 @@ async function resolveProfileRuntime(opts) {
     secrets: encrypted.secrets,
     workspace,
     defaultWorkspace: appPaths2.defaultWorkspaceDir,
-    profileDir: appPaths2.profileDir
+    profileDir: appPaths2.profileDir,
+    // openclaw needs a working config at bootstrap time.
+    ...bootstrapAgent === "openclaw" ? {
+      openclawBinaryPath: process.env.LARK_CHANNEL_OPENCLAW_BIN ?? "openclaw",
+      openclawAgentId: process.env.LARK_CHANNEL_OPENCLAW_AGENT ?? "main"
+    } : {}
   });
   const root = createRootConfig(profile2, profileConfig, encrypted.secrets);
   await saveRootConfig(root, configPath);
@@ -4391,7 +4398,12 @@ async function bootstrapProfileIntoExistingRoot(args) {
     secrets: encrypted.secrets,
     workspace,
     defaultWorkspace: appPaths2.defaultWorkspaceDir,
-    profileDir: appPaths2.profileDir
+    profileDir: appPaths2.profileDir,
+    // openclaw needs a working config at bootstrap time.
+    ...bootstrapAgent === "openclaw" ? {
+      openclawBinaryPath: process.env.LARK_CHANNEL_OPENCLAW_BIN ?? "openclaw",
+      openclawAgentId: process.env.LARK_CHANNEL_OPENCLAW_AGENT ?? "main"
+    } : {}
   });
   const nextRoot = {
     ...rootConfig,
@@ -16538,7 +16550,12 @@ async function writeNewProfile(input, rootDir) {
       secrets: encrypted.secrets,
       ...input.workspace ? { workspace: input.workspace } : {},
       defaultWorkspace: appPaths2.defaultWorkspaceDir,
-      profileDir: appPaths2.profileDir
+      profileDir: appPaths2.profileDir,
+      // openclaw profiles need a working config at creation time.
+      ...input.agentKind === "openclaw" ? {
+        openclawBinaryPath: process.env.LARK_CHANNEL_OPENCLAW_BIN ?? "openclaw",
+        openclawAgentId: process.env.LARK_CHANNEL_OPENCLAW_AGENT ?? "main"
+      } : {}
     });
   } catch (err) {
     throw new HttpError(400, err instanceof Error ? err.message : String(err));

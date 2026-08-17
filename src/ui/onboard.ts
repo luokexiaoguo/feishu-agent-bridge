@@ -139,6 +139,13 @@ export async function writeNewProfile(
       ...(input.workspace ? { workspace: input.workspace } : {}),
       defaultWorkspace: appPaths.defaultWorkspaceDir,
       profileDir: appPaths.profileDir,
+      // openclaw profiles need a working config at creation time.
+      ...(input.agentKind === 'openclaw'
+        ? {
+            openclawBinaryPath: process.env.LARK_CHANNEL_OPENCLAW_BIN ?? 'openclaw',
+            openclawAgentId: process.env.LARK_CHANNEL_OPENCLAW_AGENT ?? 'main',
+          }
+        : {}),
     });
   } catch (err) {
     throw new HttpError(400, err instanceof Error ? err.message : String(err));

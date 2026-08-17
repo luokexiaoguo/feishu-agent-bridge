@@ -100,6 +100,7 @@ function serializeProfileConfig(profile: ProfileConfig): StoredProfileConfig {
     ...(profile.mimo ? { mimo: profile.mimo } : {}),
     ...(profile.opencode ? { opencode: profile.opencode } : {}),
     ...(profile.hermes ? { hermes: profile.hermes } : {}),
+    ...(profile.openclaw ? { openclaw: profile.openclaw } : {}),
     attachments: profile.attachments,
     comments: {},
     meeting: profile.meeting,
