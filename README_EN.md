@@ -23,6 +23,23 @@
 - **Profile management**: `profile export` / `profile remove` (`--purge --yes` / `--include-secrets --yes`).
 - **Privacy**: credentials stay local; conversations and agents run on your machine — nothing is uploaded to third parties.
 
+## 🤖 Agent Capability Comparison
+
+Different agents use different adapters, so the reply experience (especially **live reasoning streaming**) varies:
+
+| Agent | Adapter | Live reasoning | Live tool calls | Notes |
+|---|---|---|---|---|
+| **claude** | `claude -p` + stream-json | ✅ Live stream | ✅ Live display | `--autocompact auto` on by default |
+| **mimo** | `mimo run --format json` | ✅ Live stream | ✅ Live display | Native `compaction.auto` on by default |
+| **codex** | `codex exec --json` | ✅ Live stream | ✅ Live display | Built-in, ready to use |
+| **opencode** | `opencode run --format json` | ✅ Live stream | ✅ Live display | Requires opencode account & provider config |
+| **openclaw** | `openclaw agent --json` | ❌ Final answer only, no reasoning shown | ❌ Final result only, no tool process | Headless mode has no streaming events; full CoT requires ACP (planned) |
+| **hermes** | `hermes acp` (ACP protocol) | ⚠️ Implemented but pilot paused | ⚠️ Implemented but pilot paused | ACP adapter code complete; resume later |
+
+> claude / mimo / codex / opencode emit structured event streams (stream-json / JSONL) — reasoning and tool calls push to the Feishu CoT bubble in real time.  
+> openclaw currently uses `agent --json` (one-shot JSON result) — only the final answer, no process events. Upgrading to ACP will bring full streaming.  
+> hermes is ACP-based (same protocol as openclaw) with complete event streaming, but the pilot is on hold.
+
 ## 🚀 Quick Start
 
 ### Prerequisites

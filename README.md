@@ -7,7 +7,7 @@
 
 > 📄 **产品文档（飞书）**：[Feishu Agent Bridge · 飞书 Agent 桥接](https://jaz8yhfgl31.feishu.cn/docx/K9P7dFYcooghqkx8VFjcuh98nEe)
 
-**Feishu Agent Bridge** 是一款将本地 CLI Agent（Claude Code / MiMo Code / Codex / Codex / Codex / OpenCode / OpenClaw / Hermes Agent）安全、稳定地接入飞书 / Lark 的桥接工具。它基于 WebSocket 长连接，修复了原版 lark-channel-bridge 中"长回复容易中断"的缺陷，并把回复渲染为飞书**原生思考过程气泡（message_cot）**——推理可折叠展开、流式刷入，最终答案单独发出，与 dsh-lark 机器人的体验一致。
+**Feishu Agent Bridge** 是一款将本地 CLI Agent（Claude Code / MiMo Code / Codex / OpenCode / OpenClaw / Hermes Agent）安全、稳定地接入飞书 / Lark 的桥接工具。它基于 WebSocket 长连接，修复了原版 lark-channel-bridge 中"长回复容易中断"的缺陷，并把回复渲染为飞书**原生思考过程气泡（message_cot）**——推理可折叠展开、流式刷入，最终答案单独发出，与 dsh-lark 机器人的体验一致。
 
 ## ✨ 功能特性
 
@@ -22,6 +22,23 @@
 - **跨平台常驻**：Windows（`.cmd` 启动器）、macOS（launchd）、Linux（systemd），每个 profile 独立 per-profile service。
 - **Profile 管理**：`profile export` / `profile remove`（支持 `--purge --yes` / `--include-secrets --yes`）。
 - **隐私安全**：凭据只存本地，对话上下文与 Agent 都在本机，数据不上传第三方。
+
+## 🤖 Agent 能力对比
+
+不同 Agent 的适配方式不同，回复体验（尤其是"思考过程是否实时流式显示"）有差异：
+
+| Agent | 适配方式 | 实时流式思考 | 实时工具调用 | 说明 |
+|---|---|---|---|---|
+| **claude** | `claude -p` + stream-json | ✅ 实时流式 | ✅ 实时展示 | 默认开启 `--autocompact auto` 自动压缩上下文 |
+| **mimo** | `mimo run --format json` | ✅ 实时流式 | ✅ 实时展示 | 原生 compaction.auto 默认开启，自动管理上下文 |
+| **codex** | `codex exec --json` | ✅ 实时流式 | ✅ 实时展示 | 已内置，开箱即用 |
+| **opencode** | `opencode run --format json` | ✅ 实时流式 | ✅ 实时展示 | 需 opencode 账号与 provider 配置 |
+| **openclaw** | `openclaw agent --json` | ❌ 仅最终答案，无思考过程 | ❌ 仅最终结果，不显示工具过程 | headless 模式无流式事件；完整 cot 体验需 ACP 路线（待后续升级） |
+| **hermes** | `hermes acp`（ACP 协议） | ⚠️ 已实现，但试点搁置中 | ⚠️ 已实现，但试点搁置中 | ACP 适配器代码完整，待后续恢复试点 |
+
+> claude / mimo / codex / opencode 走**结构化事件流**（stream-json / JSONL），推理和工具调用实时推送 → 飞书 cot 气泡流式显示。  
+> openclaw 当前走 `agent --json`（单轮 JSON 结果），只有最终答案，无过程事件；升级 ACP 后可获得完整流式体验。  
+> hermes 基于 ACP 协议（与 openclaw 同款），事件流完整，但试点暂搁置。
 
 ## 🚀 快速开始
 
