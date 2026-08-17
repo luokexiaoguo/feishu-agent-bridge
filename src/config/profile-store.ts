@@ -301,6 +301,7 @@ async function pathExists(path: string): Promise<boolean> {
 
 export function agentKindFromString(value: string | undefined): AgentKind | undefined {
   if (value === 'claude' || value === 'codex' || value === 'mimo') return value;
+  if (value === 'opencode' || value === 'hermes' || value === 'openclaw') return value;
   if (value === undefined) return undefined;
   throw new Error(`unsupported agent: ${value}`);
 }

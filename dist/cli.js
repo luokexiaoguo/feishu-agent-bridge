@@ -2460,6 +2460,7 @@ async function pathExists(path) {
 }
 function agentKindFromString(value) {
   if (value === "claude" || value === "codex" || value === "mimo") return value;
+  if (value === "opencode" || value === "hermes" || value === "openclaw") return value;
   if (value === void 0) return void 0;
   throw new Error(`unsupported agent: ${value}`);
 }
