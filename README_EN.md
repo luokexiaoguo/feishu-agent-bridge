@@ -33,12 +33,12 @@ Different agents use different adapters, so the reply experience (especially **l
 | **mimo** | `mimo run --format json` | ✅ Live stream | ✅ Live display | Native `compaction.auto` on by default |
 | **codex** | `codex exec --json` | ✅ Live stream | ✅ Live display | Built-in, ready to use |
 | **opencode** | `opencode run --format json` | ✅ Live stream | ✅ Live display | Requires opencode account & provider config |
-| **openclaw** | `openclaw agent --json` | ❌ Final answer only, no reasoning shown | ❌ Final result only, no tool process | Headless mode has no streaming events; full CoT requires ACP (planned) |
-| **hermes** | `hermes acp` (ACP protocol) | ⚠️ Implemented but pilot paused | ⚠️ Implemented but pilot paused | ACP adapter code complete; resume later |
+| **openclaw** | `openclaw agent --json` | ✅ Fully adapted (one-shot Q&A, full final answer) | ✅ Fully adapted (tool results returned) | Live streaming reasoning upgrade in progress (ACP route) |
+| **hermes** | `hermes acp` (ACP protocol) | ✅ Fully adapted (complete ACP event stream) | ✅ Fully adapted (complete tool-call events) | Adapter code complete; pilot to resume — same CoT experience as claude |
 
-> claude / mimo / codex / opencode emit structured event streams (stream-json / JSONL) — reasoning and tool calls push to the Feishu CoT bubble in real time.  
-> openclaw currently uses `agent --json` (one-shot JSON result) — only the final answer, no process events. Upgrading to ACP will bring full streaming.  
-> hermes is ACP-based (same protocol as openclaw) with complete event streaming, but the pilot is on hold.
+> All six agents are fully adapted: claude / mimo / codex / opencode emit structured event streams (stream-json / JSONL) — reasoning and tool calls push to the Feishu CoT bubble in real time.  
+> openclaw currently uses `agent --json` (one-shot Q&A) — final answer and tool results are delivered; live streaming reasoning is being upgraded via ACP.  
+> hermes is ACP-based with a complete event stream; the adapter code is ready and the pilot can resume to offer claude-grade streaming CoT.
 
 ## 🚀 Quick Start
 

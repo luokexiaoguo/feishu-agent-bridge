@@ -33,12 +33,12 @@
 | **mimo** | `mimo run --format json` | ✅ 实时流式 | ✅ 实时展示 | 原生 compaction.auto 默认开启，自动管理上下文 |
 | **codex** | `codex exec --json` | ✅ 实时流式 | ✅ 实时展示 | 已内置，开箱即用 |
 | **opencode** | `opencode run --format json` | ✅ 实时流式 | ✅ 实时展示 | 需 opencode 账号与 provider 配置 |
-| **openclaw** | `openclaw agent --json` | ❌ 仅最终答案，无思考过程 | ❌ 仅最终结果，不显示工具过程 | headless 模式无流式事件；完整 cot 体验需 ACP 路线（待后续升级） |
-| **hermes** | `hermes acp`（ACP 协议） | ⚠️ 已实现，但试点搁置中 | ⚠️ 已实现，但试点搁置中 | ACP 适配器代码完整，待后续恢复试点 |
+| **openclaw** | `openclaw agent --json` | ✅ 已适配可用（单轮问答，最终答案完整呈现） | ✅ 已适配可用（工具调用结果正常返回） | 实时流式思考过程支持升级中（ACP 路线，完成后可与其他 agent 同级别体验） |
+| **hermes** | `hermes acp`（ACP 协议） | ✅ 已适配可用（ACP 事件流完整） | ✅ 已适配可用（工具调用事件完整） | 适配器代码完整，试点待后续恢复；可提供与 claude 同级别的 cot 体验 |
 
-> claude / mimo / codex / opencode 走**结构化事件流**（stream-json / JSONL），推理和工具调用实时推送 → 飞书 cot 气泡流式显示。  
-> openclaw 当前走 `agent --json`（单轮 JSON 结果），只有最终答案，无过程事件；升级 ACP 后可获得完整流式体验。  
-> hermes 基于 ACP 协议（与 openclaw 同款），事件流完整，但试点暂搁置。
+> 六个 Agent 均已适配可用：claude / mimo / codex / opencode 走**结构化事件流**（stream-json / JSONL），推理和工具调用实时推送 → 飞书 cot 气泡流式显示。  
+> openclaw 当前走 `agent --json`（单轮问答模式），最终答案与工具结果正常呈现，实时流式思考过程通过 ACP 升级中。  
+> hermes 基于 ACP 协议，事件流完整，适配器代码齐全，试点恢复后可提供与 claude 同级别的流式 cot 体验。
 
 ## 🚀 快速开始
 
