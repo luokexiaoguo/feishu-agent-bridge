@@ -7,7 +7,7 @@
 
 > 📄 **产品文档（飞书）**：[Feishu Agent Bridge · 飞书 Agent 桥接](https://jaz8yhfgl31.feishu.cn/docx/K9P7dFYcooghqkx8VFjcuh98nEe)
 
-**Feishu Agent Bridge** 是一款将本地 CLI Agent（Claude Code / MiMo Code / OpenCode / OpenClaw / Hermes Agent）安全、稳定地接入飞书 / Lark 的桥接工具。它基于 WebSocket 长连接，修复了原版 lark-channel-bridge 中"长回复容易中断"的缺陷，并把回复渲染为飞书**原生思考过程气泡（message_cot）**——推理可折叠展开、流式刷入，最终答案单独发出，与 dsh-lark 机器人的体验一致。
+**Feishu Agent Bridge** 是一款将本地 CLI Agent（Claude Code / MiMo Code / Codex / Codex / Codex / OpenCode / OpenClaw / Hermes Agent）安全、稳定地接入飞书 / Lark 的桥接工具。它基于 WebSocket 长连接，修复了原版 lark-channel-bridge 中"长回复容易中断"的缺陷，并把回复渲染为飞书**原生思考过程气泡（message_cot）**——推理可折叠展开、流式刷入，最终答案单独发出，与 dsh-lark 机器人的体验一致。
 
 ## ✨ 功能特性
 
@@ -158,7 +158,7 @@ Agent 能力使用 `"permissions"` 配置（双档），替代已废弃的旧版
 
 ### ⚙️ 偏好设置
 - `/config` — 表单调整：消息回复方式、工具调用是否显示、并发上限、群内是否需要 @bot 才回复
-- `/model` — 打开配置表单切换模型（Claude / MiMo / OpenCode / OpenClaw 各自模型列表）
+- `/model` — 打开配置表单切换模型（Claude / MiMo / Codex / OpenCode / OpenClaw 各自模型列表）
 - `/timeout` — 当前 session 的 run 探活：`/timeout 15`（15 分钟无响应自动 kill）、`/timeout off`、`/timeout default`
 - `/account` — 查看当前应用；`/account change` 换 appId / secret 并热重连
 
