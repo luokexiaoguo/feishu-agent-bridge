@@ -5,6 +5,8 @@ export interface ModelPickerOpts {
   agentKind: AgentKind;
   /** Current model selection. */
   model: string;
+  /** Optional model options (defaults to supportedModels catalog). */
+  options?: Array<{ value: string; label: string }>;
 }
 
 /**
@@ -16,7 +18,7 @@ export interface ModelPickerOpts {
  * `body.elements` made `cardkit.create` fail with "returned no card_id".
  */
 export function modelPickerCard(opts: ModelPickerOpts): object {
-  const options = supportedModels(opts.agentKind).map((m) => ({
+  const options = (opts.options ?? supportedModels(opts.agentKind)).map((m) => ({
     text: { tag: 'plain_text', content: m.label },
     value: m.value,
   }));

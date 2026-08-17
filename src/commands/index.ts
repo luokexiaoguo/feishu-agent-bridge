@@ -891,7 +891,8 @@ async function handleModel(args: string, ctx: CommandContext): Promise<void> {
     const fv = ctx.formValue ?? {};
     const agentKind = ctx.controls.profileConfig.agentKind;
     const rawModel = String(fv.model ?? '').trim();
-    const modelValid = rawModel !== '' && supportedModels(agentKind).some((m) => m.value === rawModel);
+    // For openclaw, accept any model ID (dynamic list); for others, validate.
+    const modelValid = rawModel !== '' && (agentKind === 'openclaw' || supportedModels(agentKind).some((m) => m.value === rawModel));
     const modelSelection = modelValid
       ? rawModel
       : normalizeModelSelection(agentKind, ctx.controls.cfg.preferences?.model);
@@ -908,7 +909,8 @@ async function handleModel(args: string, ctx: CommandContext): Promise<void> {
       ctx.controls.profileConfig.mode,
     );
     if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
-    await reply(ctx, `✅ 模型已切换为 \`${modelLabel(agentKind, modelSelection)}\``);
+    const label = agentKind === 'openclaw' ? modelSelection : modelLabel(agentKind, modelSelection);
+    await reply(ctx, `✅ 模型已切换为 \`${label}\``);
     return;
   }
   if (sub === 'cancel') {
@@ -917,9 +919,32 @@ async function handleModel(args: string, ctx: CommandContext): Promise<void> {
     return;
   }
   // Show the model picker card.
+  const agentKind = ctx.controls.profileConfig.agentKind;
+  const currentModel = normalizeModelSelection(agentKind, ctx.controls.cfg.preferences?.model);
+  // For openclaw, fetch the live model list from the CLI.
+  let modelOptions: Array<{ value: string; label: string }> | undefined;
+  if (agentKind === 'openclaw') {
+    try {
+      const { execFileSync } = await import('node:child_process');
+      const binary = ctx.controls.profileConfig.openclaw?.binaryPath ?? 'openclaw';
+      const out = execFileSync(binary, ['models'], { encoding: 'utf8', timeout: 15000 });
+      // "Configured models (N): custom-mimo-v2.5/mimo-v2.5, custom-deepseek-v4-flash/deepseek-v4-flash, ..."
+      const m = out.match(/Configured models \(\d+\):\s*(.+)/);
+      if (m && m[1]) {
+        modelOptions = m[1].split(',').map((s) => {
+          const id = s.trim();
+          return { value: id, label: id };
+        });
+        modelOptions.unshift({ value: DEFAULT_MODEL, label: '跟随默认（不指定）' });
+      }
+    } catch {
+      // fall through to the static catalog
+    }
+  }
   const card = modelPickerCard({
-    agentKind: ctx.controls.profileConfig.agentKind,
-    model: normalizeModelSelection(ctx.controls.profileConfig.agentKind, ctx.controls.cfg.preferences?.model),
+    agentKind,
+    model: currentModel,
+    options: modelOptions,
   });
   if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
   try {

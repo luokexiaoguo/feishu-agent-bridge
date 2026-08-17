@@ -7838,7 +7838,7 @@ function forgetManagedCard(messageId) {
 
 // src/card/model-card.ts
 function modelPickerCard(opts) {
-  const options = supportedModels(opts.agentKind).map((m) => ({
+  const options = (opts.options ?? supportedModels(opts.agentKind)).map((m) => ({
     text: { tag: "plain_text", content: m.label },
     value: m.value
   }));
@@ -10735,10 +10735,10 @@ async function handleModel(args, ctx) {
   const sub = args.trim().split(/\s+/)[0] ?? "";
   if (sub === "submit") {
     const fv = ctx.formValue ?? {};
-    const agentKind = ctx.controls.profileConfig.agentKind;
+    const agentKind2 = ctx.controls.profileConfig.agentKind;
     const rawModel = String(fv.model ?? "").trim();
-    const modelValid = rawModel !== "" && supportedModels(agentKind).some((m) => m.value === rawModel);
-    const modelSelection = modelValid ? rawModel : normalizeModelSelection(agentKind, ctx.controls.cfg.preferences?.model);
+    const modelValid = rawModel !== "" && (agentKind2 === "openclaw" || supportedModels(agentKind2).some((m) => m.value === rawModel));
+    const modelSelection = modelValid ? rawModel : normalizeModelSelection(agentKind2, ctx.controls.cfg.preferences?.model);
     const model = modelSelection === DEFAULT_MODEL ? void 0 : modelSelection;
     const nextPreferences = {
       ...ctx.controls.cfg.preferences ?? {},
@@ -10752,7 +10752,8 @@ async function handleModel(args, ctx) {
       ctx.controls.profileConfig.mode
     );
     if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
-    await reply(ctx, `\u2705 \u6A21\u578B\u5DF2\u5207\u6362\u4E3A \`${modelLabel(agentKind, modelSelection)}\``);
+    const label = agentKind2 === "openclaw" ? modelSelection : modelLabel(agentKind2, modelSelection);
+    await reply(ctx, `\u2705 \u6A21\u578B\u5DF2\u5207\u6362\u4E3A \`${label}\``);
     return;
   }
   if (sub === "cancel") {
@@ -10760,9 +10761,29 @@ async function handleModel(args, ctx) {
     await reply(ctx, "\u274C \u5DF2\u53D6\u6D88");
     return;
   }
+  const agentKind = ctx.controls.profileConfig.agentKind;
+  const currentModel = normalizeModelSelection(agentKind, ctx.controls.cfg.preferences?.model);
+  let modelOptions;
+  if (agentKind === "openclaw") {
+    try {
+      const { execFileSync } = await import("child_process");
+      const binary = ctx.controls.profileConfig.openclaw?.binaryPath ?? "openclaw";
+      const out = execFileSync(binary, ["models"], { encoding: "utf8", timeout: 15e3 });
+      const m = out.match(/Configured models \(\d+\):\s*(.+)/);
+      if (m && m[1]) {
+        modelOptions = m[1].split(",").map((s) => {
+          const id = s.trim();
+          return { value: id, label: id };
+        });
+        modelOptions.unshift({ value: DEFAULT_MODEL, label: "\u8DDF\u968F\u9ED8\u8BA4\uFF08\u4E0D\u6307\u5B9A\uFF09" });
+      }
+    } catch {
+    }
+  }
   const card = modelPickerCard({
-    agentKind: ctx.controls.profileConfig.agentKind,
-    model: normalizeModelSelection(ctx.controls.profileConfig.agentKind, ctx.controls.cfg.preferences?.model)
+    agentKind,
+    model: currentModel,
+    options: modelOptions
   });
   if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
   try {
