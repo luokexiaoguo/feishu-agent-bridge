@@ -69,12 +69,19 @@ const HERMES_MODELS: ModelOption[] = [
   { value: 'deepseek:deepseek-v4-flash', label: 'DeepSeek · deepseek-v4-flash' },
 ];
 
+/** OpenClaw models (provider/model ids OpenClaw accepts via --model). */
+const OPENCLAW_MODELS: ModelOption[] = [
+  { value: DEFAULT_MODEL, label: '跟随默认（不指定）' },
+  { value: 'custom-mimo-v2.5/mimo-v2.5', label: 'custom-mimo-v2.5 · mimo-v2.5' },
+];
+
 /** The model picker options for a profile's agent kind. */
 export function supportedModels(agentKind: AgentKind): ModelOption[] {
   if (agentKind === 'codex') return CODEX_MODELS;
   if (agentKind === 'mimo') return MIMO_MODELS;
   if (agentKind === 'opencode') return OPENCODE_MODELS;
   if (agentKind === 'hermes') return HERMES_MODELS;
+  if (agentKind === 'openclaw') return OPENCLAW_MODELS;
   return CLAUDE_MODELS;
 }
 

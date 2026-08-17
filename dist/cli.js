@@ -1,3 +1,10 @@
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
+
 // src/cli/index.ts
 import { Command } from "commander";
 
@@ -351,7 +358,7 @@ function getAgentPreflightDiagnostic(err) {
 function isAgentPreflightDiagnostic(input) {
   if (!input || typeof input !== "object") return false;
   const raw = input;
-  return typeof raw.code === "string" && raw.code.startsWith("agent-") && (raw.agentId === "claude" || raw.agentId === "codex" || raw.agentId === "mimo" || raw.agentId === "opencode" || raw.agentId === "hermes") && typeof raw.agentName === "string" && typeof raw.command === "string";
+  return typeof raw.code === "string" && raw.code.startsWith("agent-") && (raw.agentId === "claude" || raw.agentId === "codex" || raw.agentId === "mimo" || raw.agentId === "opencode" || raw.agentId === "hermes" || raw.agentId === "openclaw") && typeof raw.agentName === "string" && typeof raw.command === "string";
 }
 function codeForSpawnError(err) {
   if (err.code === "ENOENT") return "agent-binary-not-found";
@@ -581,8 +588,8 @@ function normalizeProfileConfig(input) {
   if (raw.schemaVersion !== 2) {
     throw new Error("profile schemaVersion must be 2");
   }
-  if (raw.agentKind !== "claude" && raw.agentKind !== "codex" && raw.agentKind !== "mimo" && raw.agentKind !== "opencode" && raw.agentKind !== "hermes") {
-    throw new Error("agentKind must be claude, codex, mimo, opencode, or hermes");
+  if (raw.agentKind !== "claude" && raw.agentKind !== "codex" && raw.agentKind !== "mimo" && raw.agentKind !== "opencode" && raw.agentKind !== "hermes" && raw.agentKind !== "openclaw") {
+    throw new Error("agentKind must be claude, codex, mimo, opencode, hermes, or openclaw");
   }
   const accounts = normalizeAccounts(raw.accounts);
   if (raw.agentKind === "codex" && !raw.codex) {
@@ -596,6 +603,9 @@ function normalizeProfileConfig(input) {
   }
   if (raw.agentKind === "hermes" && !raw.hermes) {
     throw new Error("hermes profile requires hermes configuration");
+  }
+  if (raw.agentKind === "openclaw" && !raw.openclaw) {
+    throw new Error("openclaw profile requires openclaw configuration");
   }
   const preferences = normalizePreferences(raw.preferences);
   const access3 = normalizeAccess(
@@ -627,6 +637,7 @@ function normalizeProfileConfig(input) {
     ...raw.mimo ? { mimo: normalizeMimo(raw.mimo) } : {},
     ...raw.opencode ? { opencode: normalizeOpencode(raw.opencode) } : {},
     ...raw.hermes ? { hermes: normalizeHermes(raw.hermes) } : {},
+    ...raw.openclaw ? { openclaw: normalizeOpenClaw(raw.openclaw) } : {},
     attachments: {
       maxCount: numberOr(raw.attachments?.maxCount, 10),
       maxBytes: numberOr(raw.attachments?.maxBytes, 100 * 1024 * 1024),
@@ -749,6 +760,19 @@ function normalizeHermes(input) {
     ...Array.isArray(input.acpArgs) ? { acpArgs: input.acpArgs.map(String) } : {}
   };
   return hermes;
+}
+function normalizeOpenClaw(input) {
+  const openclaw = {
+    binaryPath: input.binaryPath,
+    ...typeof input.realpath === "string" ? { realpath: input.realpath } : {},
+    ...typeof input.version === "string" ? { version: input.version } : {},
+    ...typeof input.sha256 === "string" ? { sha256: input.sha256 } : {},
+    ...typeof input.owner === "number" ? { owner: input.owner } : {},
+    ...typeof input.mode === "number" ? { mode: input.mode } : {},
+    agentId: input.agentId,
+    ...typeof input.thinking === "string" ? { thinking: input.thinking } : {}
+  };
+  return openclaw;
 }
 function normalizeComments(_input) {
   return {};
@@ -946,13 +970,15 @@ async function createBootstrapProfileConfig(input) {
   const workspace = input.workspace ? await resolveBootstrapWorkspace(input.workspace) : input.defaultWorkspace ? await ensureManagedDefaultWorkspace(input.defaultWorkspace) : void 0;
   const codex = input.agentKind === "codex" ? await createBootstrapCodexConfig(input.codexBinaryPath) : void 0;
   const mimo = input.agentKind === "mimo" ? await createBootstrapMimoConfig(input.mimoBinaryPath) : void 0;
+  const openclaw = input.agentKind === "openclaw" ? await createBootstrapOpenClawConfig(input.openclawBinaryPath, input.openclawAgentId) : void 0;
   const profile2 = createDefaultProfileConfig({
     agentKind: input.agentKind,
     accounts: input.accounts,
     preferences: input.preferences,
     secrets: input.secrets,
     ...codex ? { codex } : {},
-    ...mimo ? { mimo } : {}
+    ...mimo ? { mimo } : {},
+    ...openclaw ? { openclaw } : {}
   });
   if (workspace) {
     profile2.workspaces = {
@@ -1016,6 +1042,10 @@ async function createBootstrapMimoConfig(binaryPath) {
     });
   }
   return { binaryPath: resolvedBinary };
+}
+async function createBootstrapOpenClawConfig(binaryPath, agentId) {
+  if (!binaryPath || !agentId) return void 0;
+  return { binaryPath, agentId };
 }
 function mimoBootstrapBinaryErrorCode(errno) {
   if (errno === "EACCES" || errno === "EPERM") return "agent-binary-not-executable";
@@ -1817,7 +1847,7 @@ async function acquireRuntimeLock(meta) {
 function isRuntimeLockMeta(value) {
   if (!value || typeof value !== "object") return false;
   const meta = value;
-  return (meta.kind === "profile" || meta.kind === "app") && typeof meta.target === "string" && typeof meta.profile === "string" && (meta.agentKind === "claude" || meta.agentKind === "codex" || meta.agentKind === "mimo" || meta.agentKind === "opencode" || meta.agentKind === "hermes") && typeof meta.pid === "number" && typeof meta.startedAt === "string" && (meta.appId === void 0 || typeof meta.appId === "string");
+  return (meta.kind === "profile" || meta.kind === "app") && typeof meta.target === "string" && typeof meta.profile === "string" && (meta.agentKind === "claude" || meta.agentKind === "codex" || meta.agentKind === "mimo" || meta.agentKind === "opencode" || meta.agentKind === "hermes" || meta.agentKind === "openclaw") && typeof meta.pid === "number" && typeof meta.startedAt === "string" && (meta.appId === void 0 || typeof meta.appId === "string");
 }
 
 // src/runtime/registry.ts
@@ -1825,7 +1855,7 @@ var EMPTY = { entries: [] };
 function isValidEntry(e) {
   if (!e || typeof e !== "object") return false;
   const x = e;
-  return typeof x.id === "string" && typeof x.pid === "number" && typeof x.appId === "string" && (x.tenant === "feishu" || x.tenant === "lark") && typeof x.profileName === "string" && (x.agentKind === "claude" || x.agentKind === "codex" || x.agentKind === "mimo" || x.agentKind === "opencode" || x.agentKind === "hermes") && typeof x.configPath === "string" && typeof x.startedAt === "string" && typeof x.version === "string";
+  return typeof x.id === "string" && typeof x.pid === "number" && typeof x.appId === "string" && (x.tenant === "feishu" || x.tenant === "lark") && typeof x.profileName === "string" && (x.agentKind === "claude" || x.agentKind === "codex" || x.agentKind === "mimo" || x.agentKind === "opencode" || x.agentKind === "hermes" || x.agentKind === "openclaw") && typeof x.configPath === "string" && typeof x.startedAt === "string" && typeof x.version === "string";
 }
 function isAlive(pid) {
   try {
@@ -6008,6 +6038,7 @@ function agentDisplay(agentKind) {
   if (agentKind === "mimo") return { id: "mimo", displayName: "MiMo Code" };
   if (agentKind === "opencode") return { id: "opencode", displayName: "OpenCode" };
   if (agentKind === "hermes") return { id: "hermes", displayName: "Hermes Agent" };
+  if (agentKind === "openclaw") return { id: "openclaw", displayName: "OpenClaw" };
   return { id: "claude", displayName: "Claude Code" };
 }
 
@@ -7088,6 +7119,21 @@ function hermesCapability(profile2) {
     }
   };
 }
+function openclawCapability(profile2) {
+  const maxAccess = profile2.permissions.maxAccess;
+  return {
+    agentId: "openclaw",
+    sessionKind: "openclaw-session",
+    promptInjection: "stdin-prefix",
+    systemPrompt: BRIDGE_SYSTEM_PROMPT,
+    supportsNativeHistory: false,
+    callback: {
+      marker: "__bridge_cb",
+      legacyMarkers: []
+    },
+    permissions: { maxAccess }
+  };
+}
 function opencodeCapability(profile2) {
   const maxAccess = profile2.permissions.maxAccess;
   return {
@@ -7139,11 +7185,16 @@ var HERMES_MODELS = [
   { value: "deepseek:deepseek-v4-pro", label: "DeepSeek \xB7 deepseek-v4-pro" },
   { value: "deepseek:deepseek-v4-flash", label: "DeepSeek \xB7 deepseek-v4-flash" }
 ];
+var OPENCLAW_MODELS = [
+  { value: DEFAULT_MODEL, label: "\u8DDF\u968F\u9ED8\u8BA4\uFF08\u4E0D\u6307\u5B9A\uFF09" },
+  { value: "custom-mimo-v2.5/mimo-v2.5", label: "custom-mimo-v2.5 \xB7 mimo-v2.5" }
+];
 function supportedModels(agentKind) {
   if (agentKind === "codex") return CODEX_MODELS;
   if (agentKind === "mimo") return MIMO_MODELS;
   if (agentKind === "opencode") return OPENCODE_MODELS;
   if (agentKind === "hermes") return HERMES_MODELS;
+  if (agentKind === "openclaw") return OPENCLAW_MODELS;
   return CLAUDE_MODELS;
 }
 function isDefaultModel(value) {
@@ -8738,9 +8789,9 @@ async function listCodexThreadHistory(options) {
       reject4(
         err instanceof CodexHistoryError ? err : new CodexHistoryError("spawn-failed", errorMessage3(err))
       );
-      cleanup({ kill: true });
+      cleanup2({ kill: true });
     };
-    const cleanup = (options2) => {
+    const cleanup2 = (options2) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
@@ -8752,7 +8803,7 @@ async function listCodexThreadHistory(options) {
     };
     timer = setTimeout(() => {
       reject4(new CodexHistoryError("timeout", `codex history query timed out after ${timeoutMs}ms`));
-      cleanup({ kill: true });
+      cleanup2({ kill: true });
     }, timeoutMs);
     child.once("error", fail);
     child.stdin.once("error", fail);
@@ -8778,17 +8829,17 @@ async function listCodexThreadHistory(options) {
             typeof err?.message === "string" ? err.message : "codex app-server rejected history query"
           )
         );
-        cleanup({ kill: true });
+        cleanup2({ kill: true });
         return;
       }
       const parsed = parseThreadListResponse(response.result);
       if (!parsed.ok) {
         reject4(parsed.error);
-        cleanup({ kill: true });
+        cleanup2({ kill: true });
         return;
       }
       resolve2(parsed.entries);
-      cleanup({ kill: true });
+      cleanup2({ kill: true });
     });
     child.once("exit", (code) => {
       if (settled) return;
@@ -8799,7 +8850,7 @@ async function listCodexThreadHistory(options) {
           `codex app-server exited before history response: ${code ?? "signal"}${stderr ? `: ${stderr}` : ""}`
         )
       );
-      cleanup({ kill: true });
+      cleanup2({ kill: true });
     });
     try {
       child.stdin.write(
@@ -9738,7 +9789,7 @@ async function startRunFlow(input) {
       cwdRealpath: workspace.cwdRealpath,
       policyFingerprint: policy.policyFingerprint
     });
-    if (catalogEntry?.agentId === "claude" || catalogEntry?.agentId === "mimo" || catalogEntry?.agentId === "opencode" || catalogEntry?.agentId === "hermes") {
+    if (catalogEntry?.agentId === "claude" || catalogEntry?.agentId === "mimo" || catalogEntry?.agentId === "opencode" || catalogEntry?.agentId === "hermes" || catalogEntry?.agentId === "openclaw") {
       sessionId = catalogEntry.sessionId;
       resumeFrom = sessionId;
     } else if (catalogEntry?.agentId === "codex") {
@@ -9960,7 +10011,7 @@ function resolveSummaryTarget(preference, originChatId, botOwnerId) {
 async function runMeetingAgent(deps, prompt, usedPrefix) {
   const { session, controls } = deps;
   const scopeId = meetingScopeId(session.meetingId);
-  const capability = controls.profileConfig.agentKind === "codex" ? codexCapability(controls.profileConfig) : controls.profileConfig.agentKind === "mimo" ? mimoCapability(controls.profileConfig) : controls.profileConfig.agentKind === "opencode" ? opencodeCapability(controls.profileConfig) : controls.profileConfig.agentKind === "hermes" ? hermesCapability(controls.profileConfig) : claudeCapability(controls.profileConfig);
+  const capability = controls.profileConfig.agentKind === "codex" ? codexCapability(controls.profileConfig) : controls.profileConfig.agentKind === "mimo" ? mimoCapability(controls.profileConfig) : controls.profileConfig.agentKind === "opencode" ? opencodeCapability(controls.profileConfig) : controls.profileConfig.agentKind === "hermes" ? hermesCapability(controls.profileConfig) : controls.profileConfig.agentKind === "openclaw" ? openclawCapability(controls.profileConfig) : claudeCapability(controls.profileConfig);
   const result = await startRunFlow({
     scopeId,
     scope: {
@@ -10494,7 +10545,7 @@ function consumeResumeCandidate(nonce, identity) {
   const candidate = resumeCandidates.get(nonce);
   if (!candidate) return void 0;
   resumeCandidates.delete(nonce);
-  if (candidate.scopeId !== identity.scopeId || candidate.agentId !== identity.agentId || candidate.cwdRealpath !== identity.cwdRealpath || candidate.policyFingerprint !== identity.policyFingerprint || identity.agentId === "claude" && !candidate.sessionId || identity.agentId === "codex" && !candidate.threadId || identity.agentId === "mimo" && !candidate.sessionId || identity.agentId === "opencode" && !candidate.sessionId || identity.agentId === "hermes" && !candidate.sessionId) {
+  if (candidate.scopeId !== identity.scopeId || candidate.agentId !== identity.agentId || candidate.cwdRealpath !== identity.cwdRealpath || candidate.policyFingerprint !== identity.policyFingerprint || identity.agentId === "claude" && !candidate.sessionId || identity.agentId === "codex" && !candidate.threadId || identity.agentId === "mimo" && !candidate.sessionId || identity.agentId === "opencode" && !candidate.sessionId || identity.agentId === "hermes" && !candidate.sessionId || identity.agentId === "openclaw" && !candidate.sessionId) {
     return void 0;
   }
   return candidate;
@@ -10834,7 +10885,7 @@ async function handleDoctor(args, ctx) {
     return;
   }
   doctorLastByOperator.set(rateKey, now);
-  const capability = ctx.controls.profileConfig.agentKind === "codex" ? codexCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "mimo" ? mimoCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "opencode" ? opencodeCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "hermes" ? hermesCapability(ctx.controls.profileConfig) : claudeCapability(ctx.controls.profileConfig);
+  const capability = ctx.controls.profileConfig.agentKind === "codex" ? codexCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "mimo" ? mimoCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "opencode" ? opencodeCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "hermes" ? hermesCapability(ctx.controls.profileConfig) : ctx.controls.profileConfig.agentKind === "openclaw" ? openclawCapability(ctx.controls.profileConfig) : claudeCapability(ctx.controls.profileConfig);
   const policy = evaluateRunPolicy({
     scope: {
       source: "im",
@@ -12689,7 +12740,7 @@ var RunExecutor = class {
       );
     }
     let cleaned = false;
-    const cleanup = async (waitForExit) => {
+    const cleanup2 = async (waitForExit) => {
       if (cleaned) return;
       cleaned = true;
       this.activeRuns.unregister(input.scopeId, run);
@@ -12715,7 +12766,7 @@ var RunExecutor = class {
       startedAt,
       now: this.now
     }), async () => {
-      await cleanup(!handle2.interrupted);
+      await cleanup2(!handle2.interrupted);
     });
     return {
       runId,
@@ -12727,7 +12778,7 @@ var RunExecutor = class {
         handle2.interrupted = true;
         await run.stop();
         await run.waitForExit(this.postDoneExitGraceMs);
-        await cleanup(false);
+        await cleanup2(false);
       }
     };
   }
@@ -16449,7 +16500,7 @@ async function onboardValidate(body) {
 }
 async function onboardCreate(body, rootDir) {
   const fv = asRecord4(body);
-  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" || fv.agentKind === "hermes" ? fv.agentKind : "claude";
+  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" || fv.agentKind === "hermes" || fv.agentKind === "openclaw" ? fv.agentKind : "claude";
   const input = {
     profile: String(fv.profile ?? "").trim() || agentKind,
     agentKind,
@@ -16588,7 +16639,7 @@ async function finishQrRegistration(body, rootDir) {
   if (s.status === "done" && s.profile) return { profile: s.profile };
   if (s.status === "error") throw new HttpError(400, s.error ?? "\u626B\u7801\u521B\u5EFA\u5931\u8D25");
   if (!s.app) throw new HttpError(409, "\u5C1A\u672A\u5B8C\u6210\u626B\u7801");
-  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" || fv.agentKind === "hermes" ? fv.agentKind : "claude";
+  const agentKind = fv.agentKind === "codex" || fv.agentKind === "mimo" || fv.agentKind === "opencode" || fv.agentKind === "hermes" || fv.agentKind === "openclaw" ? fv.agentKind : "claude";
   const profile2 = String(fv.profile ?? "").trim() || s.suggestedProfile || agentKind;
   const created = await writeNewProfile(
     { profile: profile2, agentKind, appId: s.app.appId, appSecret: s.app.appSecret, tenant: s.app.tenant },
@@ -17080,7 +17131,7 @@ var SessionCatalog = class {
 function normalizeEntry(input) {
   if (!input || typeof input !== "object") return void 0;
   const raw = input;
-  if (typeof raw.key !== "string" || typeof raw.scopeId !== "string" || raw.agentId !== "claude" && raw.agentId !== "codex" && raw.agentId !== "mimo" && raw.agentId !== "opencode" && raw.agentId !== "hermes" || typeof raw.cwdRealpath !== "string" || typeof raw.policyFingerprint !== "string" || raw.status !== "active" && raw.status !== "archived" || typeof raw.updatedAt !== "number") {
+  if (typeof raw.key !== "string" || typeof raw.scopeId !== "string" || raw.agentId !== "claude" && raw.agentId !== "codex" && raw.agentId !== "mimo" && raw.agentId !== "opencode" && raw.agentId !== "hermes" && raw.agentId !== "openclaw" || typeof raw.cwdRealpath !== "string" || typeof raw.policyFingerprint !== "string" || raw.status !== "active" && raw.status !== "archived" || typeof raw.updatedAt !== "number") {
     return void 0;
   }
   return {
@@ -18288,6 +18339,223 @@ function translateUpdate(update) {
   return events;
 }
 
+// src/agent/openclaw/adapter.ts
+import { spawn as spawn2 } from "child_process";
+import { mkdtempSync as mkdtempSync2, writeFileSync as writeFileSync3, rmSync as rmSync2 } from "fs";
+import { tmpdir as tmpdir3 } from "os";
+import { join as join22 } from "path";
+
+// src/agent/openclaw/argv.ts
+function buildOpenClawArgs(input) {
+  const args = ["agent", "--agent", input.agentId, "--json"];
+  args.push("--message-file", input.messageFile);
+  if (input.sessionKey) args.push("--session-key", input.sessionKey);
+  if (input.model) args.push("--model", input.model);
+  if (input.thinking) args.push("--thinking", input.thinking);
+  if (input.timeoutSec) args.push("--timeout", String(input.timeoutSec));
+  return args;
+}
+
+// src/agent/openclaw/adapter.ts
+var OpenClawAdapter = class {
+  id = "openclaw";
+  displayName = "OpenClaw";
+  binary;
+  agentId;
+  thinking;
+  defaultStopGraceMs;
+  botIdentity;
+  constructor(opts) {
+    this.binary = opts.binary ?? "openclaw";
+    this.agentId = opts.agentId;
+    this.thinking = opts.thinking;
+    this.defaultStopGraceMs = opts.stopGraceMs ?? 5e3;
+  }
+  setBotIdentity(identity) {
+    this.botIdentity = identity;
+  }
+  async isAvailable() {
+    return (await this.checkAvailability()).ok;
+  }
+  async checkAvailability() {
+    return checkAgentAvailability({
+      agentId: "openclaw",
+      agentName: "OpenClaw",
+      command: this.binary,
+      binaryPath: this.binary
+    });
+  }
+  run(opts) {
+    if (!opts.cwd) {
+      throw new Error("cwd is required for OpenClawAdapter.run");
+    }
+    const tmpDir = mkdtempSync2(join22(tmpdir3(), "openclaw-bridge-"));
+    const msgFile = join22(tmpDir, "prompt.txt");
+    writeFileSync3(msgFile, opts.prompt, "utf8");
+    const args = buildOpenClawArgs({
+      agentId: this.agentId,
+      messageFile: msgFile,
+      sessionKey: opts.sessionId,
+      // opaque session key for continuity
+      model: opts.model,
+      thinking: this.thinking
+    });
+    log.info("agent", "spawn", {
+      binary: this.binary,
+      args: args.slice(0, 4),
+      agentId: this.agentId,
+      cwd: opts.cwd,
+      hasSession: Boolean(opts.sessionId),
+      promptChars: opts.prompt.length,
+      model: opts.model
+    });
+    const child = spawn2(this.binary, args, {
+      cwd: opts.cwd,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const stderrChunks = [];
+    let runtimeError = null;
+    child.stderr.on("data", (chunk) => {
+      stderrChunks.push(chunk);
+      const text = chunk.toString("utf8").trim();
+      if (text && !/state\/db|readonly|hardening/i.test(text)) {
+        log.warn("agent", "stderr", { line: text.slice(0, 300) });
+      }
+    });
+    child.on("error", (err) => {
+      runtimeError = err;
+    });
+    const stopGraceMs = opts.stopGraceMs ?? this.defaultStopGraceMs;
+    let stopReason;
+    return {
+      runId: opts.runId,
+      events: createEventStream6({
+        child,
+        msgFile,
+        tmpDir,
+        stderrChunks,
+        getError: () => runtimeError,
+        getStopReason: () => stopReason
+      }),
+      async stop() {
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        stopReason = "interrupted";
+        child.kill("SIGTERM");
+        await new Promise((resolve2) => {
+          const timer = setTimeout(() => {
+            if (child.exitCode === null && child.signalCode === null) {
+              child.kill("SIGKILL");
+            }
+            resolve2();
+          }, stopGraceMs);
+          child.once("exit", () => {
+            clearTimeout(timer);
+            resolve2();
+          });
+        });
+      },
+      waitForExit(timeoutMs) {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          return Promise.resolve(true);
+        }
+        return new Promise((resolve2) => {
+          const timer = setTimeout(() => {
+            child.removeListener("exit", onExit);
+            resolve2(false);
+          }, timeoutMs);
+          const onExit = () => {
+            clearTimeout(timer);
+            resolve2(true);
+          };
+          child.once("exit", onExit);
+        });
+      }
+    };
+  }
+};
+async function* createEventStream6(ctx) {
+  const { child } = ctx;
+  let stdout = "";
+  try {
+    for await (const chunk of child.stdout ?? new (__require("stream")).Readable()) {
+      stdout += chunk.toString("utf8");
+      if (stdout.length > 8 * 1024 * 1024) {
+        child.kill("SIGKILL");
+        break;
+      }
+    }
+  } catch {
+  }
+  const exitCode = await waitForExitCode4(child);
+  cleanup(ctx);
+  const stopReason = ctx.getStopReason();
+  if (stopReason) {
+    yield { type: "done", terminationReason: stopReason };
+    return;
+  }
+  const runtimeError = ctx.getError();
+  if (exitCode !== 0 && exitCode !== null) {
+    const stderr = Buffer.concat(ctx.stderrChunks).toString("utf8").trim();
+    yield {
+      type: "error",
+      message: `openclaw agent exited with code ${exitCode}${stderr ? `: ${stderr.slice(0, 300)}` : ""}`,
+      terminationReason: "failed"
+    };
+    return;
+  }
+  if (runtimeError) {
+    yield {
+      type: "error",
+      message: `openclaw spawn failed: ${runtimeError.message}`,
+      terminationReason: "failed"
+    };
+    return;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    yield {
+      type: "error",
+      message: `openclaw agent returned unparsable output: ${stdout.slice(0, 200)}`,
+      terminationReason: "failed"
+    };
+    return;
+  }
+  const result = parsed;
+  const payloads = result.result?.payloads ?? [];
+  const text = payloads.map((p3) => p3.text ?? "").join("\n").trim();
+  const meta = result.result?.meta ?? {};
+  if (result.status !== "ok" && !text) {
+    yield {
+      type: "error",
+      message: `openclaw agent failed: ${JSON.stringify(result).slice(0, 300)}`,
+      terminationReason: "failed"
+    };
+    return;
+  }
+  yield { type: "system", sessionId: meta.sessionId, cwd: void 0 };
+  if (text) yield { type: "final_text", content: text };
+  if (meta.usage) {
+    yield { type: "usage", inputTokens: meta.usage.input, outputTokens: meta.usage.output };
+  }
+  yield { type: "done", sessionId: meta.sessionId, terminationReason: "normal" };
+}
+function cleanup(ctx) {
+  try {
+    rmSync2(ctx.tmpDir, { recursive: true, force: true });
+  } catch {
+  }
+}
+function waitForExitCode4(child) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve(child.exitCode);
+  }
+  return new Promise((resolve2) => {
+    child.once("exit", (code) => resolve2(code));
+  });
+}
+
 // src/runtime/agent-runtime.ts
 function createRuntimeAgent(profileConfig, appPaths2) {
   const larkChannelConfigPath = appPaths2.configPath ?? appPaths2.configFile;
@@ -18349,6 +18617,17 @@ function createRuntimeAgent(profileConfig, appPaths2) {
       larkChannel
     });
   }
+  if (profileConfig.agentKind === "openclaw") {
+    const openclaw = profileConfig.openclaw;
+    if (!openclaw?.binaryPath || !openclaw.agentId) {
+      throw new Error("openclaw profile requires openclaw.binaryPath and agentId");
+    }
+    return new OpenClawAdapter({
+      binary: openclaw.binaryPath,
+      agentId: openclaw.agentId,
+      thinking: openclaw.thinking
+    });
+  }
   return new ClaudeAdapter({ larkChannel });
 }
 async function checkRuntimeAgentAvailability(agent) {
@@ -18357,9 +18636,9 @@ async function checkRuntimeAgentAvailability(agent) {
   if (ok) return { ok: true };
   const diagnostic = {
     code: "agent-binary-not-found",
-    agentId: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : agent.id === "hermes" ? "hermes" : "claude",
+    agentId: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : agent.id === "hermes" ? "hermes" : agent.id === "openclaw" ? "openclaw" : "claude",
     agentName: agent.displayName,
-    command: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : agent.id === "hermes" ? "hermes" : "claude"
+    command: agent.id === "codex" ? "codex" : agent.id === "mimo" ? "mimo" : agent.id === "opencode" ? "opencode" : agent.id === "hermes" ? "hermes" : agent.id === "openclaw" ? "openclaw" : "claude"
   };
   return { ok: false, diagnostic, error: new AgentPreflightError(diagnostic) };
 }
@@ -18943,17 +19222,17 @@ function openBrowser(url) {
 // src/cli/index.ts
 var program = new Command();
 program.name("feishu-agent-bridge").description("Bridge Feishu/Lark messenger with local CLI coding agents").version(package_default.version, "-v, --version");
-program.command("run").description("Run the bridge in the foreground (was `start` in older versions)").option("-c, --config <path>", "path to config file").option("--profile <name>", "profile name to run").option("--web-ui", "run the machine-wide supervisor + local web console (hosts all profiles); default is a single-profile headless run").option("--agent <kind>", "agent kind for a new profile (claude, codex, mimo, opencode, or hermes)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
+program.command("run").description("Run the bridge in the foreground (was `start` in older versions)").option("-c, --config <path>", "path to config file").option("--profile <name>", "profile name to run").option("--web-ui", "run the machine-wide supervisor + local web console (hosts all profiles); default is a single-profile headless run").option("--agent <kind>", "agent kind for a new profile (claude, codex, mimo, opencode, hermes, or openclaw)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
   await runStart(opts);
 });
-program.command("migrate").description("Migrate legacy bridge config/state into the current profile layout").option("-c, --config <path>", "path to config file").option("--profile <name>", "target profile name for legacy v1 config migration").option("--agent <kind>", "agent kind for legacy v1 profile migration (claude, codex, mimo, opencode, or hermes)").action(async (opts) => {
+program.command("migrate").description("Migrate legacy bridge config/state into the current profile layout").option("-c, --config <path>", "path to config file").option("--profile <name>", "target profile name for legacy v1 config migration").option("--agent <kind>", "agent kind for legacy v1 profile migration (claude, codex, mimo, opencode, hermes, or openclaw)").action(async (opts) => {
   await runMigrate(opts);
 });
 var profile = program.command("profile").description("Manage local bridge profiles");
 profile.command("list").description("List configured profiles").action(async () => {
   await runProfileList();
 });
-profile.command("create <name>").description("Create a profile from QR registration or existing app credentials").option("--agent <kind>", "agent kind (claude, codex, mimo, opencode, or hermes)").option("--workspace <path>", "initial working directory for this profile").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").action(async (name, opts) => {
+profile.command("create <name>").description("Create a profile from QR registration or existing app credentials").option("--agent <kind>", "agent kind (claude, codex, mimo, opencode, hermes, or openclaw)").option("--workspace <path>", "initial working directory for this profile").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").action(async (name, opts) => {
   await runProfileCreate(name, opts);
 });
 profile.command("use <name>").description("Set the active profile").action(async (name) => {
@@ -18979,7 +19258,7 @@ program.command("ps").description("List running bridge processes on this machine
 program.command("kill <target>").description("Kill a running bridge process by short id or list index (SIGTERM, then SIGKILL after 2s). Was `stop <target>` in older versions.").action(async (target) => {
   await runKillCli(target);
 });
-program.command("start").description("Install (if needed) and start the bridge as an OS-managed daemon").option("--profile <name>", "profile name (defaults to active profile)").option("--web-ui", "run the supervisor + web console as the background service (hosts all profiles) instead of a single profile").option("--agent <kind>", "agent kind for first-run profile bootstrap (claude, codex, mimo, opencode, or hermes)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
+program.command("start").description("Install (if needed) and start the bridge as an OS-managed daemon").option("--profile <name>", "profile name (defaults to active profile)").option("--web-ui", "run the supervisor + web console as the background service (hosts all profiles) instead of a single profile").option("--agent <kind>", "agent kind for first-run profile bootstrap (claude, codex, mimo, opencode, hermes, or openclaw)").option("--workspace <path>", "initial working directory for first-run profile bootstrap").option("--app-id <id>", "use an existing Lark/Feishu app instead of QR app creation").option("--app-secret <secret>", "App Secret for --app-id; prefer interactive input on shared machines").option("--tenant <tenant>", "tenant for --app-id (feishu or lark; default feishu)").option("--skip-check-lark-cli", "skip lark-cli pre-flight check (auto-install + bind)").action(async (opts) => {
   await runServiceStart(opts);
 });
 program.command("stop").description("Stop the OS-managed daemon and disable autostart (service definition stays)").option("--profile <name>", "profile name (defaults to active profile)").option("--web-ui", "target the supervisor service (auto-detected when no per-profile service exists)").action(async (opts) => {

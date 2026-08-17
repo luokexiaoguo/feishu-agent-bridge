@@ -4,3 +4,4 @@ export { CodexAdapter } from './codex/adapter';
 export { MimoAdapter } from './mimo/adapter';
 export { OpencodeAdapter } from './opencode/adapter';
 export { HermesAdapter } from './hermes/adapter';
+export { OpenClawAdapter } from './openclaw/adapter';

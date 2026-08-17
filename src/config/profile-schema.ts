@@ -13,7 +13,7 @@ import {
   type PermissionSource,
 } from './permissions';
 
-export type AgentKind = 'claude' | 'codex' | 'mimo' | 'opencode' | 'hermes';
+export type AgentKind = 'claude' | 'codex' | 'mimo' | 'opencode' | 'hermes' | 'openclaw';
 export type SandboxMode = CodexSandboxMode;
 export type { AccessMode, PermissionConfig, PermissionSource };
 
@@ -90,6 +90,19 @@ export interface HermesConfig {
   mode?: number;
   /** Extra args for `hermes acp`, e.g. ["--profile", "tomato-studio"]. */
   acpArgs?: string[];
+}
+
+export interface OpenClawConfig {
+  binaryPath: string;
+  realpath?: string;
+  version?: string;
+  sha256?: string;
+  owner?: number;
+  mode?: number;
+  /** The OpenClaw agent id to drive (e.g. "main"). */
+  agentId: string;
+  /** Thinking level passed to `--thinking` when set. */
+  thinking?: string;
 }
 
 export interface AttachmentConfig {
@@ -204,6 +217,7 @@ export interface ProfileConfig {
   mimo?: MimoConfig;
   opencode?: OpencodeConfig;
   hermes?: HermesConfig;
+  openclaw?: OpenClawConfig;
   attachments: AttachmentConfig;
   comments: CommentConfig;
   /** In-meeting agent settings. See {@link MeetingConfig}. */
@@ -251,6 +265,7 @@ export interface CreateDefaultProfileConfigInput {
   mimo?: MimoConfig;
   opencode?: OpencodeConfig;
   hermes?: HermesConfig;
+  openclaw?: OpenClawConfig;
   secrets?: SecretsConfig;
 }
 
@@ -289,6 +304,7 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
     mimo?: MimoConfig;
     opencode?: OpencodeConfig;
     hermes?: HermesConfig;
+    openclaw?: OpenClawConfig;
     attachments?: Partial<AttachmentConfig>;
     comments?: unknown;
     meeting?: unknown;
@@ -298,8 +314,8 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
   if (raw.schemaVersion !== 2) {
     throw new Error('profile schemaVersion must be 2');
   }
-  if (raw.agentKind !== 'claude' && raw.agentKind !== 'codex' && raw.agentKind !== 'mimo' && raw.agentKind !== 'opencode' && raw.agentKind !== 'hermes') {
-    throw new Error('agentKind must be claude, codex, mimo, opencode, or hermes');
+  if (raw.agentKind !== 'claude' && raw.agentKind !== 'codex' && raw.agentKind !== 'mimo' && raw.agentKind !== 'opencode' && raw.agentKind !== 'hermes' && raw.agentKind !== 'openclaw') {
+    throw new Error('agentKind must be claude, codex, mimo, opencode, hermes, or openclaw');
   }
   const accounts = normalizeAccounts(raw.accounts);
   if (raw.agentKind === 'codex' && !raw.codex) {
@@ -313,6 +329,9 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
   }
   if (raw.agentKind === 'hermes' && !raw.hermes) {
     throw new Error('hermes profile requires hermes configuration');
+  }
+  if (raw.agentKind === 'openclaw' && !raw.openclaw) {
+    throw new Error('openclaw profile requires openclaw configuration');
   }
 
   const preferences = normalizePreferences(raw.preferences);
@@ -346,6 +365,7 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
     ...(raw.mimo ? { mimo: normalizeMimo(raw.mimo) } : {}),
     ...(raw.opencode ? { opencode: normalizeOpencode(raw.opencode) } : {}),
     ...(raw.hermes ? { hermes: normalizeHermes(raw.hermes) } : {}),
+    ...(raw.openclaw ? { openclaw: normalizeOpenClaw(raw.openclaw) } : {}),
     attachments: {
       maxCount: numberOr(raw.attachments?.maxCount, 10),
       maxBytes: numberOr(raw.attachments?.maxBytes, 100 * 1024 * 1024),
@@ -493,6 +513,20 @@ function normalizeHermes(input: HermesConfig): HermesConfig {
     ...(Array.isArray(input.acpArgs) ? { acpArgs: input.acpArgs.map(String) } : {}),
   };
   return hermes;
+}
+
+function normalizeOpenClaw(input: OpenClawConfig): OpenClawConfig {
+  const openclaw: OpenClawConfig = {
+    binaryPath: input.binaryPath,
+    ...(typeof input.realpath === 'string' ? { realpath: input.realpath } : {}),
+    ...(typeof input.version === 'string' ? { version: input.version } : {}),
+    ...(typeof input.sha256 === 'string' ? { sha256: input.sha256 } : {}),
+    ...(typeof input.owner === 'number' ? { owner: input.owner } : {}),
+    ...(typeof input.mode === 'number' ? { mode: input.mode } : {}),
+    agentId: input.agentId,
+    ...(typeof input.thinking === 'string' ? { thinking: input.thinking } : {}),
+  };
+  return openclaw;
 }
 
 function normalizeComments(_input: unknown): CommentConfig {

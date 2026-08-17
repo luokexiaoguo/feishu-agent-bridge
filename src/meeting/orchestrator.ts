@@ -1,6 +1,6 @@
 import type { LarkChannel } from '@larksuite/channel';
 import type { AgentEvent } from '../agent/types';
-import { claudeCapability, codexCapability, mimoCapability, opencodeCapability, hermesCapability } from '../agent/capability';
+import { claudeCapability, codexCapability, mimoCapability, opencodeCapability, hermesCapability, openclawCapability } from '../agent/capability';
 import type { Controls } from '../commands';
 import { log } from '../core/logger';
 import type { RunExecutor } from '../runtime/run-executor';
@@ -304,7 +304,9 @@ async function runMeetingAgent(
           ? opencodeCapability(controls.profileConfig)
           : controls.profileConfig.agentKind === 'hermes'
             ? hermesCapability(controls.profileConfig)
-            : claudeCapability(controls.profileConfig);
+            : controls.profileConfig.agentKind === 'openclaw'
+              ? openclawCapability(controls.profileConfig)
+              : claudeCapability(controls.profileConfig);
   const result = await startRunFlow({
     scopeId,
     scope: {

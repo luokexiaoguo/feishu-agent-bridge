@@ -2,8 +2,8 @@ import type { AccessMode } from '../config/permissions';
 import type { ProfileConfig } from '../config/profile-schema';
 import { BRIDGE_SYSTEM_PROMPT } from './bridge-system-prompt';
 
-export type AgentCapabilityId = 'claude' | 'codex' | 'mimo' | 'opencode' | 'hermes';
-export type AgentSessionKind = 'claude-session' | 'codex-thread' | 'mimo-session' | 'opencode-session' | 'hermes-session';
+export type AgentCapabilityId = 'claude' | 'codex' | 'mimo' | 'opencode' | 'hermes' | 'openclaw';
+export type AgentSessionKind = 'claude-session' | 'codex-thread' | 'mimo-session' | 'opencode-session' | 'hermes-session' | 'openclaw-session';
 export type PromptInjectionMode = 'append-system-prompt' | 'stdin-prefix';
 
 export interface AgentCapability {
@@ -90,6 +90,22 @@ export function hermesCapability(profile: Pick<ProfileConfig, 'permissions'>): A
     permissions: {
       maxAccess,
     },
+  };
+}
+
+export function openclawCapability(profile: Pick<ProfileConfig, 'permissions'>): AgentCapability {
+  const maxAccess = profile.permissions.maxAccess;
+  return {
+    agentId: 'openclaw',
+    sessionKind: 'openclaw-session',
+    promptInjection: 'stdin-prefix',
+    systemPrompt: BRIDGE_SYSTEM_PROMPT,
+    supportsNativeHistory: false,
+    callback: {
+      marker: '__bridge_cb',
+      legacyMarkers: [],
+    },
+    permissions: { maxAccess },
   };
 }
 

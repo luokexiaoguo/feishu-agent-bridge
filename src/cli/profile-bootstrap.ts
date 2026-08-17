@@ -15,6 +15,8 @@ export interface BootstrapProfileInput {
   defaultWorkspace?: string;
   codexBinaryPath?: string;
   mimoBinaryPath?: string;
+  openclawBinaryPath?: string;
+  openclawAgentId?: string;
   profileDir?: string;
 }
 
@@ -34,6 +36,10 @@ export async function createBootstrapProfileConfig(
     input.agentKind === 'mimo'
       ? await createBootstrapMimoConfig(input.mimoBinaryPath)
       : undefined;
+  const openclaw =
+    input.agentKind === 'openclaw'
+      ? await createBootstrapOpenClawConfig(input.openclawBinaryPath, input.openclawAgentId)
+      : undefined;
   const profile = createDefaultProfileConfig({
     agentKind: input.agentKind,
     accounts: input.accounts,
@@ -41,6 +47,7 @@ export async function createBootstrapProfileConfig(
     secrets: input.secrets,
     ...(codex ? { codex } : {}),
     ...(mimo ? { mimo } : {}),
+    ...(openclaw ? { openclaw } : {}),
   });
   if (workspace) {
     profile.workspaces = {
@@ -109,6 +116,14 @@ export async function createBootstrapMimoConfig(binaryPath: string | undefined) 
     });
   }
   return { binaryPath: resolvedBinary };
+}
+
+export async function createBootstrapOpenClawConfig(
+  binaryPath: string | undefined,
+  agentId: string | undefined,
+): Promise<import('../config/profile-schema').OpenClawConfig | undefined> {
+  if (!binaryPath || !agentId) return undefined;
+  return { binaryPath, agentId };
 }
 
 function mimoBootstrapBinaryErrorCode(errno: string | undefined) {
