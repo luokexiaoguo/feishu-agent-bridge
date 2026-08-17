@@ -1,4 +1,0 @@
-MARKER_URL=https://open.feishu.cn/page/launcher?user_code=86MX-J3YH&from=sdk&source=node-sdk%2Flark-channel-bridge&tp=sdk
-MARKER_SESSION=b39c251101ae334142
-MARKER_SCANNED
-MARKER_FINISHED={"profile":"openclaw-test"}

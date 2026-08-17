@@ -13922,13 +13922,6 @@ var CotClient = class {
   }
   async update(ref, events) {
     if (events.length === 0) return;
-    try {
-      fs.appendFileSync(
-        process.env.HOME + "/.lark-channel/lcb-cot-dump.log",
-        JSON.stringify({ t: Date.now(), op: "update", cot_id: ref.cotId, message_id: ref.messageId, events }) + "\n"
-      );
-    } catch {
-    }
     await this.request("/open-apis/im/v1/message_cot", {
       method: "PUT",
       body: JSON.stringify({
@@ -14118,7 +14111,7 @@ async function consumeCotEvents(events, publisher, opts) {
         closeTextIfNeeded();
         const toolCallId = evt.id;
         const detailed = opts.detail === "detailed";
-        const title = detailed ? evt.name : evt.name;
+        const title = evt.name;
         toolBrief.set(toolCallId, { name: evt.name, input: evt.input });
         publisher.enqueue("TOOL_CALL_START", {
           toolCallId,

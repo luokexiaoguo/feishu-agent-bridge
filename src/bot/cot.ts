@@ -109,15 +109,6 @@ export class CotClient {
 
   async update(ref: CotRef, events: readonly CotEvent[]): Promise<void> {
     if (events.length === 0) return;
-    // DIAG: dump real requests for byte-level comparison with dsh-lark.
-    try {
-      fs.appendFileSync(
-        process.env.HOME + '/.lark-channel/lcb-cot-dump.log',
-        JSON.stringify({ t: Date.now(), op: 'update', cot_id: ref.cotId, message_id: ref.messageId, events }) + '\n',
-      );
-    } catch {
-      /* diag only */
-    }
     await this.request('/open-apis/im/v1/message_cot', {
       method: 'PUT',
       body: JSON.stringify({
@@ -386,7 +377,7 @@ export async function consumeCotEvents(
         // dsh-lark parity: title is a plain display label (no emoji /
         // markdown / status icons) — toolHeaderText's "⏳ **name** — …"
         // shape was not rendered by the client's tool header.
-        const title = detailed ? evt.name : evt.name;
+        const title = evt.name;
         toolBrief.set(toolCallId, { name: evt.name, input: evt.input });
         publisher.enqueue('TOOL_CALL_START', {
           toolCallId,
