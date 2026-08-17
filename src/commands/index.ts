@@ -922,7 +922,11 @@ async function handleModel(args: string, ctx: CommandContext): Promise<void> {
     model: normalizeModelSelection(ctx.controls.profileConfig.agentKind, ctx.controls.cfg.preferences?.model),
   });
   if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
-  await sendManagedCard(ctx.channel, ctx.msg.chatId, card, commandReplyOptions(ctx));
+  try {
+    await sendManagedCard(ctx.channel, ctx.msg.chatId, card, commandReplyOptions(ctx));
+  } catch {
+    await reply(ctx, '❌ 模型选择卡片发送失败，请使用 `/config` 配置模型。');
+  }
 }
 
 async function handleStop(args: string, ctx: CommandContext): Promise<void> {

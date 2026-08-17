@@ -10759,7 +10759,11 @@ async function handleModel(args, ctx) {
     model: normalizeModelSelection(ctx.controls.profileConfig.agentKind, ctx.controls.cfg.preferences?.model)
   });
   if (ctx.fromCardAction) await recallMessage(ctx, ctx.msg.messageId);
-  await sendManagedCard(ctx.channel, ctx.msg.chatId, card, commandReplyOptions(ctx));
+  try {
+    await sendManagedCard(ctx.channel, ctx.msg.chatId, card, commandReplyOptions(ctx));
+  } catch {
+    await reply(ctx, "\u274C \u6A21\u578B\u9009\u62E9\u5361\u7247\u53D1\u9001\u5931\u8D25\uFF0C\u8BF7\u4F7F\u7528 `/config` \u914D\u7F6E\u6A21\u578B\u3002");
+  }
 }
 async function handleStop(args, ctx) {
   const targetScope = args.trim();
