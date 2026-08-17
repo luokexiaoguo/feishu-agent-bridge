@@ -5,7 +5,9 @@
 
 **[中文](README.md)** | **[English](README_EN.md)**
 
-**Feishu Agent Bridge** 是一款将本地 CLI Agent（Claude Code / MiMo Code / OpenCode）安全、稳定地接入飞书 / Lark 的桥接工具。它基于 WebSocket 长连接，修复了原版 lark-channel-bridge 中"长回复容易中断"的缺陷，并把回复渲染为飞书**原生思考过程气泡（message_cot）**——推理可折叠展开、流式刷入，最终答案单独发出，与 dsh-lark 机器人的体验一致。
+> 📄 **产品文档（飞书）**：[Feishu Agent Bridge · 飞书 Agent 桥接](https://jaz8yhfgl31.feishu.cn/docx/K9P7dFYcooghqkx8VFjcuh98nEe)
+
+**Feishu Agent Bridge** 是一款将本地 CLI Agent（Claude Code / MiMo Code / OpenCode / Hermes Agent）安全、稳定地接入飞书 / Lark 的桥接工具。它基于 WebSocket 长连接，修复了原版 lark-channel-bridge 中"长回复容易中断"的缺陷，并把回复渲染为飞书**原生思考过程气泡（message_cot）**——推理可折叠展开、流式刷入，最终答案单独发出，与 dsh-lark 机器人的体验一致。
 
 ## ✨ 功能特性
 

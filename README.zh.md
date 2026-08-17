@@ -7,6 +7,8 @@
 
 本文件仅为纯中文的独立索引页，方便直接访问。
 
+> 📄 **产品文档（飞书）**：[Feishu Agent Bridge · 飞书 Agent 桥接](https://jaz8yhfgl31.feishu.cn/docx/K9P7dFYcooghqkx8VFjcuh98nEe)
+
 ## 快速了解
 
 将本地的 Claude Code / MiMo Code / OpenCode 等命令行 Agent 安全、稳定地接入飞书 / Lark。
