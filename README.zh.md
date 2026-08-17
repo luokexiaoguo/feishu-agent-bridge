@@ -9,8 +9,6 @@
 
 > 📄 **产品文档（飞书）**：[Feishu Agent Bridge · 飞书 Agent 桥接](https://jaz8yhfgl31.feishu.cn/docx/K9P7dFYcooghqkx8VFjcuh98nEe)
 
-> 🙏 **致谢**：本项目的表现形态（原生思考过程气泡、会话管理、飞书内交互等）借鉴了 [dsh-lark（飞书 DeepSeek Harness（DSH）插件）](https://github.com/omdsh-dev/dsh-lark) 的部分设计，特此致谢。
-
 ## 快速了解
 
 将本地的 Claude Code / MiMo Code / OpenCode 等命令行 Agent 安全、稳定地接入飞书 / Lark。
@@ -59,4 +57,5 @@
 
 - 完整双语文档（含架构、安装、命令、FAQ）：**[README.md](./README.md)**
 - 变更记录：[CHANGES.md](./CHANGES.md)
-- 许可证：[BSD-3-Clause](./LICENSE)
+- 许可证：[BSD-3-Clause](./LICENSE)。本仓库派生自 [zarazhangrui/lark-coding-agent-bridge](https://github.com/zarazhangrui/lark-coding-agent-bridge)，保留上游许可证。
+- **致谢**：本项目的表现形态（原生思考过程气泡、会话管理、飞书内交互等）借鉴了 [dsh-lark（飞书 DeepSeek Harness（DSH）插件）](https://github.com/omdsh-dev/dsh-lark) 的部分设计，特此致谢。
