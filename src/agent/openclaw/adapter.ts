@@ -78,7 +78,7 @@ export class OpenClawAdapter implements AgentAdapter {
     const args = buildOpenClawArgs({
       agentId: this.agentId,
       messageFile: msgFile,
-      sessionKey: opts.sessionId, // opaque session key for continuity
+      sessionId: opts.sessionId,
       model: opts.model,
       thinking: this.thinking,
     });
@@ -227,14 +227,16 @@ async function* createEventStream(ctx: StreamContext): AsyncGenerator<AgentEvent
   }
   const result = parsed as {
     status?: string;
-    result?: { payloads?: Array<{ text?: string }>; meta?: Record<string, unknown> };
+    result?: {
+      payloads?: Array<{ text?: string }>;
+      meta?: { agentMeta?: { sessionId?: string; usage?: { input?: number; output?: number } } };
+    };
   };
   const payloads = result.result?.payloads ?? [];
   const text = payloads.map((p) => p.text ?? '').join('\n').trim();
-  const meta = (result.result?.meta ?? {}) as {
-    sessionId?: string;
-    usage?: { input?: number; output?: number };
-  };
+  // sessionId/usage live under meta.agentMeta (probed 2026-08-17).
+  const agentMeta = result.result?.meta?.agentMeta ?? {};
+  const sessionId = agentMeta.sessionId;
   if (result.status !== 'ok' && !text) {
     yield {
       type: 'error',
@@ -244,12 +246,12 @@ async function* createEventStream(ctx: StreamContext): AsyncGenerator<AgentEvent
     return;
   }
 
-  yield { type: 'system', sessionId: meta.sessionId, cwd: undefined };
+  yield { type: 'system', sessionId, cwd: undefined };
   if (text) yield { type: 'final_text', content: text };
-  if (meta.usage) {
-    yield { type: 'usage', inputTokens: meta.usage.input, outputTokens: meta.usage.output };
+  if (agentMeta.usage) {
+    yield { type: 'usage', inputTokens: agentMeta.usage.input, outputTokens: agentMeta.usage.output };
   }
-  yield { type: 'done', sessionId: meta.sessionId, terminationReason: 'normal' };
+  yield { type: 'done', sessionId, terminationReason: 'normal' };
 }
 
 function cleanup(ctx: StreamContext): void {

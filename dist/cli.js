@@ -18349,7 +18349,7 @@ import { join as join22 } from "path";
 function buildOpenClawArgs(input) {
   const args = ["agent", "--agent", input.agentId, "--json"];
   args.push("--message-file", input.messageFile);
-  if (input.sessionKey) args.push("--session-key", input.sessionKey);
+  if (input.sessionId) args.push("--session-id", input.sessionId);
   if (input.model) args.push("--model", input.model);
   if (input.thinking) args.push("--thinking", input.thinking);
   if (input.timeoutSec) args.push("--timeout", String(input.timeoutSec));
@@ -18395,8 +18395,7 @@ var OpenClawAdapter = class {
     const args = buildOpenClawArgs({
       agentId: this.agentId,
       messageFile: msgFile,
-      sessionKey: opts.sessionId,
-      // opaque session key for continuity
+      sessionId: opts.sessionId,
       model: opts.model,
       thinking: this.thinking
     });
@@ -18525,7 +18524,8 @@ async function* createEventStream6(ctx) {
   const result = parsed;
   const payloads = result.result?.payloads ?? [];
   const text = payloads.map((p3) => p3.text ?? "").join("\n").trim();
-  const meta = result.result?.meta ?? {};
+  const agentMeta = result.result?.meta?.agentMeta ?? {};
+  const sessionId = agentMeta.sessionId;
   if (result.status !== "ok" && !text) {
     yield {
       type: "error",
@@ -18534,12 +18534,12 @@ async function* createEventStream6(ctx) {
     };
     return;
   }
-  yield { type: "system", sessionId: meta.sessionId, cwd: void 0 };
+  yield { type: "system", sessionId, cwd: void 0 };
   if (text) yield { type: "final_text", content: text };
-  if (meta.usage) {
-    yield { type: "usage", inputTokens: meta.usage.input, outputTokens: meta.usage.output };
+  if (agentMeta.usage) {
+    yield { type: "usage", inputTokens: agentMeta.usage.input, outputTokens: agentMeta.usage.output };
   }
-  yield { type: "done", sessionId: meta.sessionId, terminationReason: "normal" };
+  yield { type: "done", sessionId, terminationReason: "normal" };
 }
 function cleanup(ctx) {
   try {
