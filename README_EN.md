@@ -7,7 +7,9 @@
 
 > 📄 **Product doc (Feishu):** [Feishu Agent Bridge · 飞书 Agent 桥接](https://jaz8yhfgl31.feishu.cn/docx/K9P7dFYcooghqkx8VFjcuh98nEe)
 
-**Feishu Agent Bridge** bridges your local CLI coding agents (Claude Code / MiMo Code / Codex / Codex / Codex / OpenCode / OpenClaw / Hermes Agent) into Feishu / Lark — safely and reliably. Built on WebSocket long connections, it fixes the "long replies get killed" family of bugs from the original lark-channel-bridge, and renders replies as Feishu's **native thinking-process bubbles (message_cot)** — collapsible reasoning that streams in live, with the final answer sent separately, matching the dsh-lark bot experience.
+> 🙏 **Acknowledgments**: The interaction model (native thinking-process bubbles, session management, in-chat configuration, etc.) draws on design elements from [dsh-lark (Feishu DeepSeek Harness plugin)](https://github.com/omdsh-dev/dsh-lark). Special thanks to the dsh-lark project.
+
+**Feishu Agent Bridge** bridges your local CLI coding agents (Claude Code / MiMo Code / Codex / OpenCode / OpenClaw / Hermes Agent) into Feishu / Lark — safely and reliably. Built on WebSocket long connections, it fixes the "long replies get killed" family of bugs from the original lark-channel-bridge, and renders replies as Feishu's **native thinking-process bubbles (message_cot)** — collapsible reasoning that streams in live, with the final answer sent separately, matching the dsh-lark bot experience.
 
 ## ✨ Features
 
