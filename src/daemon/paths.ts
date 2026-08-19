@@ -8,8 +8,13 @@ import { paths } from '../config/paths';
  * Logical service name — used as the launchd label AND as the systemd
  * unit name. Single-instance for now; if we ever support multiple bots
  * per machine the suffix can grow `.{appid}` without breaking installs.
+ *
+ * 2026-08-20: rebranded from `lark-channel-bridge.bot` to
+ * `feishu-agent-bridge.bot` so machine, repo and docs share one name.
+ * Old units (`lark-channel-bridge.bot.*.service`) must be stopped/disabled
+ * before starting the new ones (see CHANGES.md).
  */
-export const SERVICE_NAME = 'lark-channel-bridge.bot';
+export const SERVICE_NAME = 'feishu-agent-bridge.bot';
 
 /**
  * Reserved service id for the machine-wide supervisor+console daemon

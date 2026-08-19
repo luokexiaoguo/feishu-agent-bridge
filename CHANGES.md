@@ -4,6 +4,12 @@
 > 传输层不变：仍基于 `@larksuite/channel`（WebSocket 长连接，与 dsh-lark-channel 同源）。
 > 2026-08-17 CLI 更名为 `feishu-agent-bridge`（自有品牌）；新增 OpenCode / OpenClaw / Hermes 适配器。
 
+## 服务名统一为 feishu-agent-bridge.bot.*（2026-08-20）
+
+- `src/daemon/paths.ts` 的 `SERVICE_NAME` 由 `lark-channel-bridge.bot` 改为 **`feishu-agent-bridge.bot`**——systemd unit 名 / launchd label / Windows task 名现在与仓库名、CLI 名完全一致（此前 CLI 已改名，但服务名仍用旧品牌，导致「仓库一个名、本机一个名」的割裂）。
+- **升级动作（老机器）**：旧 unit（`lark-channel-bridge.bot.*.service`）需先 stop + disable，再用 `feishu-agent-bridge start --profile <name>` 重建新 unit（自动 enable）。配置 / 会话 / secrets 全部在 `~/.lark-channel/`，不受影响。
+- 其余 `lark-channel-bridge` 字符串引用为**历史迁移路径 / 数据标识**（旧版 `~/.config/lark-channel-bridge` 数据迁移、`source: 'lark-channel-bridge'` 记录），保留不动以兼容旧数据。
+
 ## 新功能：/compact 上下文压缩（2026-08-19，全 agent 统一）
 
 - **背景**：各 agent CLI（claude/codex/mimo/hermes/openclaw/opencode）的 headless 模式都没有统一的手动压缩入口（claude 的 `--autocompact` 仅自动、TUI 的 `/compact` 在 headless 下不可用）。桥此前不持有对话历史，无法提供压缩。
