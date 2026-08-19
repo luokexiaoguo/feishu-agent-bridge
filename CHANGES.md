@@ -18,6 +18,18 @@
 - 收益：新电脑只要 agent 模型配好（能跑任务），`/compact` 就**零配置开箱即用**，无需任何额外 LLM key。
 - 验证：真实 claude CLI 冒烟通过（5.8s 出摘要）；单测 490 全绿。
 
+## /compact 全面原生透传（2026-08-20 二次改造）
+
+- **原则**：`/compact` 是纯透传——桥只做飞书 ↔ CLI 的媒介，压缩由 agent 自己的命令完成。删除了摘要器中转层（会话历史记录 CompactStore、摘要 LLM、`<compacted_context>` 注入全部移除）。
+- **各 agent 原生压缩命令（均已实测）**：
+  - claude：`claude -p --resume <session> "/compact [焦点]"`
+  - mimo：`mimo run --session <id> "/compact"`（实测输出"会话状态已压缩归档"，压缩后事实保留）
+  - openclaw：`openclaw sessions compact <key>`（实测 "Compacted session"）
+  - opencode / codex / hermes：headless CLI 无压缩命令（实测 opencode 把 `/compact` 当普通消息发给模型），不支持透传，`/compact` 返回明确提示
+- 代码：`src/session/compact-llm.ts` 只保留 `runNativeCompact`（claude/mimo 走 adapter.run + sessionId）和 `compactOpenClawSession`（spawn `openclaw sessions list --json` 解析 key → `sessions compact <key>`，sessionId 由桥 sessionCatalog 记录）；`src/session/compact.ts` 删除；profile `compaction` 配置简化为 `enabled`（旧 `keepRounds`/`llm` 忽略兼容）。
+- **修复事故**：此前一次文档更新脚本 `open(path,'w').write(open(path).read()...)` 先清空再读，把 README.md / README_EN.md 提交成了空文件（a9bcceb），已从父提交恢复并重新应用 /compact 文档，readme-contract 测试恢复全绿。
+- 验证：claude E2E（种事实→压缩→保留）、mimo 真实冒烟（21s）、openclaw bash 实测；单测 475 全绿。
+
 ## Claude 原生 /compact 透传（2026-08-20）
 
 - **修正此前调研错误**：Claude Code 的 `/compact` 不是只在 TUI 里可用——`claude -p --resume <session> "/compact"`（headless 模式）直接触发官方压缩（stderr 出现 `query_source: "compact"`、进程 exit 0；官方 Agent SDK 也支持以 prompt 发送 `/compact` 并返回 `compact_boundary`）。此前仅查 `claude --help` 文本就断言"headless 无手动压缩"，调研不彻底，已修正。

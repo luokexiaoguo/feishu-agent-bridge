@@ -1,251 +1,46 @@
-import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+import { log } from '../core/logger';
 
 /**
- * LLM client used by the bridge's /compact context-compression feature.
+ * Native context-compaction passthroughs.
  *
- * The bridge itself has no model API of its own, so compaction summarizes
- * conversation history through an OpenAI-compatible endpoint. The default is
- * the machine-local new-api proxy that 玄策 (hermes) already uses
- * (`http://localhost:3000/v1` + `deepseek-v4-flash`), whose key lives in
- * `~/.hermes/.env` as `LOCAL_DEEPSEEK_API_KEY`.
+ * The bridge's `/compact` command is a pure mediator: it dispatches the
+ * agent CLI's OWN compaction command and reports the result. No transcript
+ * recording, no summarizer LLM, no injected summaries — the bridge just
+ * connects Feishu to the CLI, and each agent's native compaction does the
+ * real work (verified per agent):
+ *
+ * - claude:   `claude -p --resume <session> "/compact [focus]"`
+ *             (headless mode accepts the slash command; query_source: compact)
+ * - mimo:     `mimo run --session <id> "/compact"`
+ *             (client parses the slash command; "会话状态已压缩归档")
+ * - openclaw: `openclaw sessions compact <key>`
+ *             (dedicated CLI command; "Compacted session ...")
  */
 
-export const DEFAULT_COMPACT_BASE_URL = 'http://localhost:3000/v1';
-export const DEFAULT_COMPACT_MODEL = 'deepseek-v4-flash';
 export const DEFAULT_COMPACT_TIMEOUT_MS = 30_000;
 
-const HERMES_ENV_PATH = join(homedir(), '.hermes', '.env');
-
-/**
- * Resolve the API key for the compaction LLM, in order:
- * 1. explicitly configured `compaction.llm.apiKey`
- * 2. env var `LOCAL_DEEPSEEK_API_KEY`
- * 3. `LOCAL_DEEPSEEK_API_KEY` from `~/.hermes/.env` (玄策's local new-api key)
- */
-export async function resolveCompactApiKey(configured?: string): Promise<string | undefined> {
-  if (configured && configured.trim()) return configured.trim();
-  if (process.env.LOCAL_DEEPSEEK_API_KEY?.trim()) return process.env.LOCAL_DEEPSEEK_API_KEY.trim();
-  try {
-    const text = await readFile(HERMES_ENV_PATH, 'utf8');
-    const match = text.match(/^\s*LOCAL_DEEPSEEK_API_KEY\s*=\s*(.+)\s*$/m);
-    const value = match?.[1]?.trim().replace(/^["']|["']$/g, '');
-    return value || undefined;
-  } catch {
-    // No ~/.hermes/.env — the caller will surface a clear missing-key error.
-    return undefined;
-  }
-}
-
-const SYSTEM_PROMPT = `你是一个飞书 AI 助手的会话压缩器。用户会给你两段材料：
-1. 【已有的早期对话摘要】（可选，可能为空）
-2. 【本次待压缩的对话记录】
-
-请把「已有摘要 + 本次对话记录」合并压缩成一份新的早期对话摘要，规则：
-- 用中文输出，Markdown 无序列表，每个要点一行，总长度不超过 600 字
-- 必须保留：用户的明确偏好/决定/要求、已完成事项与结论、未完成或待办事项、关键文件名/路径/数字/配置/账号信息
-- 可以丢弃：问候寒暄、重复表达、工具调用细节、纯情绪化内容
-- 不要编造对话里没有出现过的信息；已有摘要里的内容若与对话不冲突就保留
-- 输出只有摘要本体，不要任何前后缀、标题或说明`;
-
-export interface SummarizeConversationInput {
-  baseUrl: string;
-  model: string;
-  apiKey: string;
-  /** Optional previous compaction summary to merge into the new one. */
-  oldSummary?: string;
-  /** The raw conversation transcript to compress (oldest → newest). */
-  transcript: string;
-  timeoutMs?: number;
-}
-
-/**
- * Call the OpenAI-compatible endpoint and return the compressed summary.
- * Throws on transport errors, non-2xx status, or an empty completion.
- */
-export async function summarizeConversation(
-  input: SummarizeConversationInput,
-): Promise<string> {
-  const {
-    baseUrl,
-    model,
-    apiKey,
-    oldSummary,
-    transcript,
-    timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS,
-  } = input;
-
-  const userContent = [
-    ...(oldSummary && oldSummary.trim()
-      ? [`【已有的早期对话摘要】\n${oldSummary.trim()}`, '---']
-      : []),
-    `【本次待压缩的对话记录】\n${transcript}`,
-  ].join('\n');
-
-  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.2,
-        // deepseek-v4-flash 是推理模型，reasoning 会先占掉一部分 token；
-        // 给足余量避免长对话摘要被截断成空。
-        max_tokens: 2500,
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-  } catch (err) {
-    throw new Error(
-      `摘要模型请求失败：${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  if (!res.ok) {
-    const detail = (await res.text().catch(() => '')).slice(0, 500);
-    throw new Error(`摘要模型返回 ${res.status}: ${detail || res.statusText}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: unknown } }>;
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('摘要模型返回了空内容');
-  }
-  return content.trim();
-}
-
-/**
- * Build the summarizer prompt handed to an agent CLI when no dedicated
- * summary LLM key is configured. Kept in sync with {@link SYSTEM_PROMPT}.
- */
-export function buildAgentSummaryPrompt(input: {
-  oldSummary?: string;
-  transcript: string;
-}): string {
-  const { oldSummary, transcript } = input;
-  const parts = [
-    '你是会话压缩器。把下面这段对话历史压缩成一份「早期对话摘要」。规则：',
-    '- 用中文输出，Markdown 无序列表，每个要点一行，总长度不超过 600 字',
-    '- 必须保留：用户的明确偏好/决定/要求、已完成事项与结论、未完成或待办事项、关键文件名/路径/数字/配置/账号信息',
-    '- 可以丢弃：问候寒暄、重复表达、工具调用细节、纯情绪化内容',
-    '- 不要编造对话里没有出现过的信息',
-    '- 输出只有摘要本体，不要任何前后缀、标题或说明',
-    '',
-  ];
-  if (oldSummary && oldSummary.trim()) {
-    parts.push(`【已有的早期对话摘要】\n${oldSummary.trim()}`, '---');
-  }
-  parts.push(`【本次待压缩的对话记录】\n${transcript}`);
-  return parts.join('\n');
-}
-
-export interface SummarizeViaAgentInput {
+export interface RunNativeCompactInput {
   adapter: import('../agent/types').AgentAdapter;
-  cwd?: string;
-  oldSummary?: string;
-  transcript: string;
-  timeoutMs?: number;
-}
-
-/**
- * Fallback summarizer: reuse the profile's own agent CLI (e.g. claude) to
- * produce the summary. This is what makes `/compact` work out-of-the-box on
- * machines that have a configured agent but no dedicated LLM API key.
- *
- * Spawns the agent with a pure summarization prompt (no session resume, no
- * bridge context) and collects its final text. Throws on agent errors or
- * timeout.
- */
-export async function summarizeViaAgent(
-  input: SummarizeViaAgentInput,
-): Promise<string> {
-  const { adapter, cwd, oldSummary, transcript, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
-  const run = adapter.run({
-    runId: `compact-${Math.random().toString(36).slice(2, 10)}`,
-    prompt: buildAgentSummaryPrompt({ oldSummary, transcript }),
-    ...(cwd ? { cwd } : {}),
-    permissionMode: 'bypassPermissions',
-    stopGraceMs: 5000,
-  });
-
-  let text = '';
-  let error: string | undefined;
-  const finished = (async () => {
-    for await (const evt of run.events) {
-      if (evt.type === 'text') text += evt.delta;
-      else if (evt.type === 'final_text') text = evt.content;
-      else if (evt.type === 'error') {
-        error = evt.message;
-        break;
-      }
-    }
-  })();
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timedOut = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      // Agent 挂起时停止它，并立即以超时失败返回——即使事件流不结束，
-      // Promise.race 也能让 /compact 及时报错而不是卡死。
-      void run.stop().catch(() => undefined);
-      reject(new Error(`用 ${adapter.displayName} 做摘要超时（${timeoutMs}ms）`));
-    }, timeoutMs);
-  });
-
-  try {
-    await Promise.race([finished, timedOut]);
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-
-  if (error) throw new Error(`用 ${adapter.displayName} 做摘要失败：${error}`);
-  const summary = text.trim();
-  if (!summary) throw new Error(`用 ${adapter.displayName} 做摘要返回了空内容`);
-  return summary;
-}
-
-export interface SummarizeViaClaudeNativeInput {
-  adapter: import('../agent/types').AgentAdapter;
-  /** The claude session to compact (must already exist — resume target). */
+  /** The agent session to compact (must already exist — resume target). */
   sessionId: string;
+  /** The exact command string to send, e.g. `/compact` or `/compact <focus>`. */
+  command: string;
   cwd?: string;
-  /** Optional focus instructions forwarded to `/compact <focus>`. */
-  focus?: string;
   timeoutMs?: number;
 }
 
 /**
- * Claude-native compaction passthrough: run `/compact` directly against the
- * claude CLI resumed session (`claude -p --resume <session> "/compact"`).
- * This is a real terminal-passthrough — Claude Code's own compaction (the
- * same as the TUI's `/compact`) summarizes the conversation and rewrites the
- * session file; the next resumed run carries the compacted context.
- *
- * Compaction is silent in stream-json mode (no text events); completion is
- * signalled by the process exiting 0. Errors surface as `error` events.
- * Returns `true` on success.
+ * Generic passthrough for adapters whose run() accepts a session id and
+ * interprets a `/compact` slash command client-side (claude, mimo).
+ * Consumes the event stream to completion; errors surface as thrown
+ * exceptions. Returns true on success.
  */
-export async function summarizeViaClaudeNative(
-  input: SummarizeViaClaudeNativeInput,
-): Promise<boolean> {
-  const { adapter, sessionId, cwd, focus, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
-  const focusText = focus?.trim();
+export async function runNativeCompact(input: RunNativeCompactInput): Promise<boolean> {
+  const { adapter, sessionId, command, cwd, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
   const run = adapter.run({
     runId: `compact-native-${Math.random().toString(36).slice(2, 10)}`,
-    prompt: focusText ? `/compact ${focusText}` : '/compact',
+    prompt: command,
     sessionId,
     ...(cwd ? { cwd } : {}),
     permissionMode: 'bypassPermissions',
@@ -266,7 +61,7 @@ export async function summarizeViaClaudeNative(
   const timedOut = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       void run.stop().catch(() => undefined);
-      reject(new Error(`Claude 原生压缩超时（${timeoutMs}ms）`));
+      reject(new Error(`${adapter.displayName} 原生压缩超时（${timeoutMs}ms）`));
     }, timeoutMs);
   });
 
@@ -278,6 +73,90 @@ export async function summarizeViaClaudeNative(
     if (timer) clearTimeout(timer);
   }
 
-  if (error) throw new Error(`Claude 原生压缩失败：${error}`);
+  if (error) throw new Error(`${adapter.displayName} 原生压缩失败：${error}`);
+  return true;
+}
+
+export interface CompactOpenClawSessionInput {
+  /** Path to the openclaw binary (from openclaw.binaryPath). */
+  binary: string;
+  /** OpenClaw agent id owning the session (e.g. "main"). */
+  agentId: string;
+  /** The bridge-recorded session id (openclaw's system id). */
+  sessionId: string;
+  timeoutMs?: number;
+}
+
+function runCli(
+  binary: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (c: Buffer) => (stdout += c.toString('utf8')));
+    child.stderr.on('data', (c: Buffer) => (stderr += c.toString('utf8')));
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`openclaw 命令超时（${timeoutMs}ms）: openclaw ${args.join(' ')}`));
+    }, timeoutMs);
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? -1, stdout, stderr });
+    });
+  });
+}
+
+/**
+ * OpenClaw native compaction: resolve the session key from
+ * `openclaw sessions list --json` (matching the recorded system id), then
+ * run `openclaw sessions compact <key>`.
+ */
+export async function compactOpenClawSession(
+  input: CompactOpenClawSessionInput,
+): Promise<boolean> {
+  const { binary, agentId, sessionId, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
+
+  const list = await runCli(binary, ['sessions', 'list', '--json'], timeoutMs);
+  if (list.code !== 0) {
+    throw new Error(`openclaw sessions list 失败（${list.code}）: ${list.stderr.trim().slice(0, 200)}`);
+  }
+  if (!list.stdout.trim()) {
+    throw new Error('openclaw sessions list 返回空输出（exit 0）——请确认 openclaw gateway 可用');
+  }
+  let sessions: Array<{ key?: string; sessionId?: string }> = [];
+  try {
+    const parsed = JSON.parse(list.stdout) as unknown;
+    sessions = Array.isArray(parsed)
+      ? (parsed as Array<{ key?: string; sessionId?: string }>)
+      : (((parsed as { sessions?: unknown })?.sessions) as Array<{ key?: string; sessionId?: string }> | undefined) ?? [];
+  } catch {
+    throw new Error('openclaw sessions list 输出无法解析');
+  }
+
+  const match = sessions.find((s) => s.sessionId === sessionId);
+  if (!match?.key) {
+    throw new Error(`找不到 openclaw 会话（sessionId=${sessionId}），可能已清理，请先聊几轮`);
+  }
+
+  const compact = await runCli(
+    binary,
+    ['sessions', 'compact', match.key, '--agent', agentId],
+    timeoutMs,
+  );
+  if (compact.code !== 0) {
+    // "Already compacted" is benign — compaction already happened.
+    if (/already compacted/i.test(compact.stdout + compact.stderr)) return true;
+    throw new Error(
+      `openclaw sessions compact 失败（${compact.code}）: ${(compact.stderr || compact.stdout).trim().slice(0, 200)}`,
+    );
+  }
+  log.info('compact', 'openclaw-done', { key: match.key });
   return true;
 }

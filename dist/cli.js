@@ -377,12 +377,12 @@ function excerpt(value) {
 }
 
 // src/cli/commands/migrate.ts
-import { mkdir as mkdir10, readFile as readFile6, readdir, rename as rename3, rm as rm7, stat as stat4 } from "fs/promises";
-import { dirname as dirname11, join as join11 } from "path";
+import { mkdir as mkdir10, readFile as readFile5, readdir, rename as rename3, rm as rm7, stat as stat4 } from "fs/promises";
+import { dirname as dirname11, join as join10 } from "path";
 
 // src/cli/profile-bootstrap.ts
 import { mkdir, realpath as realpath2 } from "fs/promises";
-import { join as join3 } from "path";
+import { join as join2 } from "path";
 
 // src/config/permissions.ts
 var ACCESS_ORDER = {
@@ -570,196 +570,7 @@ function isClaudePermissionMode(value) {
   return value === "default" || value === "acceptEdits" || value === "bypassPermissions" || value === "plan";
 }
 
-// src/session/compact-llm.ts
-import { readFile } from "fs/promises";
-import { homedir } from "os";
-import { join } from "path";
-var DEFAULT_COMPACT_BASE_URL = "http://localhost:3000/v1";
-var DEFAULT_COMPACT_MODEL = "deepseek-v4-flash";
-var DEFAULT_COMPACT_TIMEOUT_MS = 3e4;
-var HERMES_ENV_PATH = join(homedir(), ".hermes", ".env");
-async function resolveCompactApiKey(configured) {
-  if (configured && configured.trim()) return configured.trim();
-  if (process.env.LOCAL_DEEPSEEK_API_KEY?.trim()) return process.env.LOCAL_DEEPSEEK_API_KEY.trim();
-  try {
-    const text = await readFile(HERMES_ENV_PATH, "utf8");
-    const match = text.match(/^\s*LOCAL_DEEPSEEK_API_KEY\s*=\s*(.+)\s*$/m);
-    const value = match?.[1]?.trim().replace(/^["']|["']$/g, "");
-    return value || void 0;
-  } catch {
-    return void 0;
-  }
-}
-var SYSTEM_PROMPT = `\u4F60\u662F\u4E00\u4E2A\u98DE\u4E66 AI \u52A9\u624B\u7684\u4F1A\u8BDD\u538B\u7F29\u5668\u3002\u7528\u6237\u4F1A\u7ED9\u4F60\u4E24\u6BB5\u6750\u6599\uFF1A
-1. \u3010\u5DF2\u6709\u7684\u65E9\u671F\u5BF9\u8BDD\u6458\u8981\u3011\uFF08\u53EF\u9009\uFF0C\u53EF\u80FD\u4E3A\u7A7A\uFF09
-2. \u3010\u672C\u6B21\u5F85\u538B\u7F29\u7684\u5BF9\u8BDD\u8BB0\u5F55\u3011
-
-\u8BF7\u628A\u300C\u5DF2\u6709\u6458\u8981 + \u672C\u6B21\u5BF9\u8BDD\u8BB0\u5F55\u300D\u5408\u5E76\u538B\u7F29\u6210\u4E00\u4EFD\u65B0\u7684\u65E9\u671F\u5BF9\u8BDD\u6458\u8981\uFF0C\u89C4\u5219\uFF1A
-- \u7528\u4E2D\u6587\u8F93\u51FA\uFF0CMarkdown \u65E0\u5E8F\u5217\u8868\uFF0C\u6BCF\u4E2A\u8981\u70B9\u4E00\u884C\uFF0C\u603B\u957F\u5EA6\u4E0D\u8D85\u8FC7 600 \u5B57
-- \u5FC5\u987B\u4FDD\u7559\uFF1A\u7528\u6237\u7684\u660E\u786E\u504F\u597D/\u51B3\u5B9A/\u8981\u6C42\u3001\u5DF2\u5B8C\u6210\u4E8B\u9879\u4E0E\u7ED3\u8BBA\u3001\u672A\u5B8C\u6210\u6216\u5F85\u529E\u4E8B\u9879\u3001\u5173\u952E\u6587\u4EF6\u540D/\u8DEF\u5F84/\u6570\u5B57/\u914D\u7F6E/\u8D26\u53F7\u4FE1\u606F
-- \u53EF\u4EE5\u4E22\u5F03\uFF1A\u95EE\u5019\u5BD2\u6684\u3001\u91CD\u590D\u8868\u8FBE\u3001\u5DE5\u5177\u8C03\u7528\u7EC6\u8282\u3001\u7EAF\u60C5\u7EEA\u5316\u5185\u5BB9
-- \u4E0D\u8981\u7F16\u9020\u5BF9\u8BDD\u91CC\u6CA1\u6709\u51FA\u73B0\u8FC7\u7684\u4FE1\u606F\uFF1B\u5DF2\u6709\u6458\u8981\u91CC\u7684\u5185\u5BB9\u82E5\u4E0E\u5BF9\u8BDD\u4E0D\u51B2\u7A81\u5C31\u4FDD\u7559
-- \u8F93\u51FA\u53EA\u6709\u6458\u8981\u672C\u4F53\uFF0C\u4E0D\u8981\u4EFB\u4F55\u524D\u540E\u7F00\u3001\u6807\u9898\u6216\u8BF4\u660E`;
-async function summarizeConversation(input) {
-  const {
-    baseUrl,
-    model,
-    apiKey,
-    oldSummary,
-    transcript,
-    timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS
-  } = input;
-  const userContent = [
-    ...oldSummary && oldSummary.trim() ? [`\u3010\u5DF2\u6709\u7684\u65E9\u671F\u5BF9\u8BDD\u6458\u8981\u3011
-${oldSummary.trim()}`, "---"] : [],
-    `\u3010\u672C\u6B21\u5F85\u538B\u7F29\u7684\u5BF9\u8BDD\u8BB0\u5F55\u3011
-${transcript}`
-  ].join("\n");
-  const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
-  let res;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userContent }
-        ],
-        temperature: 0.2,
-        // deepseek-v4-flash 是推理模型，reasoning 会先占掉一部分 token；
-        // 给足余量避免长对话摘要被截断成空。
-        max_tokens: 2500
-      }),
-      signal: AbortSignal.timeout(timeoutMs)
-    });
-  } catch (err) {
-    throw new Error(
-      `\u6458\u8981\u6A21\u578B\u8BF7\u6C42\u5931\u8D25\uFF1A${err instanceof Error ? err.message : String(err)}`
-    );
-  }
-  if (!res.ok) {
-    const detail = (await res.text().catch(() => "")).slice(0, 500);
-    throw new Error(`\u6458\u8981\u6A21\u578B\u8FD4\u56DE ${res.status}: ${detail || res.statusText}`);
-  }
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    throw new Error("\u6458\u8981\u6A21\u578B\u8FD4\u56DE\u4E86\u7A7A\u5185\u5BB9");
-  }
-  return content.trim();
-}
-function buildAgentSummaryPrompt(input) {
-  const { oldSummary, transcript } = input;
-  const parts = [
-    "\u4F60\u662F\u4F1A\u8BDD\u538B\u7F29\u5668\u3002\u628A\u4E0B\u9762\u8FD9\u6BB5\u5BF9\u8BDD\u5386\u53F2\u538B\u7F29\u6210\u4E00\u4EFD\u300C\u65E9\u671F\u5BF9\u8BDD\u6458\u8981\u300D\u3002\u89C4\u5219\uFF1A",
-    "- \u7528\u4E2D\u6587\u8F93\u51FA\uFF0CMarkdown \u65E0\u5E8F\u5217\u8868\uFF0C\u6BCF\u4E2A\u8981\u70B9\u4E00\u884C\uFF0C\u603B\u957F\u5EA6\u4E0D\u8D85\u8FC7 600 \u5B57",
-    "- \u5FC5\u987B\u4FDD\u7559\uFF1A\u7528\u6237\u7684\u660E\u786E\u504F\u597D/\u51B3\u5B9A/\u8981\u6C42\u3001\u5DF2\u5B8C\u6210\u4E8B\u9879\u4E0E\u7ED3\u8BBA\u3001\u672A\u5B8C\u6210\u6216\u5F85\u529E\u4E8B\u9879\u3001\u5173\u952E\u6587\u4EF6\u540D/\u8DEF\u5F84/\u6570\u5B57/\u914D\u7F6E/\u8D26\u53F7\u4FE1\u606F",
-    "- \u53EF\u4EE5\u4E22\u5F03\uFF1A\u95EE\u5019\u5BD2\u6684\u3001\u91CD\u590D\u8868\u8FBE\u3001\u5DE5\u5177\u8C03\u7528\u7EC6\u8282\u3001\u7EAF\u60C5\u7EEA\u5316\u5185\u5BB9",
-    "- \u4E0D\u8981\u7F16\u9020\u5BF9\u8BDD\u91CC\u6CA1\u6709\u51FA\u73B0\u8FC7\u7684\u4FE1\u606F",
-    "- \u8F93\u51FA\u53EA\u6709\u6458\u8981\u672C\u4F53\uFF0C\u4E0D\u8981\u4EFB\u4F55\u524D\u540E\u7F00\u3001\u6807\u9898\u6216\u8BF4\u660E",
-    ""
-  ];
-  if (oldSummary && oldSummary.trim()) {
-    parts.push(`\u3010\u5DF2\u6709\u7684\u65E9\u671F\u5BF9\u8BDD\u6458\u8981\u3011
-${oldSummary.trim()}`, "---");
-  }
-  parts.push(`\u3010\u672C\u6B21\u5F85\u538B\u7F29\u7684\u5BF9\u8BDD\u8BB0\u5F55\u3011
-${transcript}`);
-  return parts.join("\n");
-}
-async function summarizeViaAgent(input) {
-  const { adapter, cwd, oldSummary, transcript, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
-  const run = adapter.run({
-    runId: `compact-${Math.random().toString(36).slice(2, 10)}`,
-    prompt: buildAgentSummaryPrompt({ oldSummary, transcript }),
-    ...cwd ? { cwd } : {},
-    permissionMode: "bypassPermissions",
-    stopGraceMs: 5e3
-  });
-  let text = "";
-  let error;
-  const finished = (async () => {
-    for await (const evt of run.events) {
-      if (evt.type === "text") text += evt.delta;
-      else if (evt.type === "final_text") text = evt.content;
-      else if (evt.type === "error") {
-        error = evt.message;
-        break;
-      }
-    }
-  })();
-  let timer;
-  const timedOut = new Promise((_, reject4) => {
-    timer = setTimeout(() => {
-      void run.stop().catch(() => void 0);
-      reject4(new Error(`\u7528 ${adapter.displayName} \u505A\u6458\u8981\u8D85\u65F6\uFF08${timeoutMs}ms\uFF09`));
-    }, timeoutMs);
-  });
-  try {
-    await Promise.race([finished, timedOut]);
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-  if (error) throw new Error(`\u7528 ${adapter.displayName} \u505A\u6458\u8981\u5931\u8D25\uFF1A${error}`);
-  const summary = text.trim();
-  if (!summary) throw new Error(`\u7528 ${adapter.displayName} \u505A\u6458\u8981\u8FD4\u56DE\u4E86\u7A7A\u5185\u5BB9`);
-  return summary;
-}
-async function summarizeViaClaudeNative(input) {
-  const { adapter, sessionId, cwd, focus, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
-  const focusText = focus?.trim();
-  const run = adapter.run({
-    runId: `compact-native-${Math.random().toString(36).slice(2, 10)}`,
-    prompt: focusText ? `/compact ${focusText}` : "/compact",
-    sessionId,
-    ...cwd ? { cwd } : {},
-    permissionMode: "bypassPermissions",
-    stopGraceMs: 5e3
-  });
-  let error;
-  const finished = (async () => {
-    for await (const evt of run.events) {
-      if (evt.type === "error") {
-        error = evt.message;
-        break;
-      }
-    }
-  })();
-  let timer;
-  const timedOut = new Promise((_, reject4) => {
-    timer = setTimeout(() => {
-      void run.stop().catch(() => void 0);
-      reject4(new Error(`Claude \u539F\u751F\u538B\u7F29\u8D85\u65F6\uFF08${timeoutMs}ms\uFF09`));
-    }, timeoutMs);
-  });
-  try {
-    await Promise.race([finished, timedOut]);
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-  if (error) throw new Error(`Claude \u539F\u751F\u538B\u7F29\u5931\u8D25\uFF1A${error}`);
-  return true;
-}
-
 // src/config/profile-schema.ts
-var COMPACTION_DEFAULTS = {
-  enabled: true,
-  keepRounds: 20,
-  llm: {
-    baseUrl: DEFAULT_COMPACT_BASE_URL,
-    model: DEFAULT_COMPACT_MODEL,
-    timeoutMs: DEFAULT_COMPACT_TIMEOUT_MS
-  }
-};
 function effectiveLarkCliIdentity(profile2) {
   return profile2.mode === "team" ? "bot-only" : profile2.larkCli.identityPreset;
 }
@@ -971,17 +782,8 @@ function normalizeComments(_input) {
 }
 function normalizeCompaction(input) {
   const raw = input && typeof input === "object" ? input : {};
-  const keepRounds = typeof raw.keepRounds === "number" && Number.isFinite(raw.keepRounds) ? Math.max(0, Math.floor(raw.keepRounds)) : COMPACTION_DEFAULTS.keepRounds;
-  const llm = raw.llm && typeof raw.llm === "object" ? raw.llm : {};
   return {
-    enabled: raw.enabled !== false,
-    keepRounds,
-    llm: {
-      baseUrl: typeof llm.baseUrl === "string" && llm.baseUrl.trim() ? llm.baseUrl.trim() : COMPACTION_DEFAULTS.llm.baseUrl,
-      model: typeof llm.model === "string" && llm.model.trim() ? llm.model.trim() : COMPACTION_DEFAULTS.llm.model,
-      ...typeof llm.apiKey === "string" && llm.apiKey.trim() ? { apiKey: llm.apiKey.trim() } : {},
-      ...typeof llm.timeoutMs === "number" && Number.isFinite(llm.timeoutMs) && llm.timeoutMs > 0 ? { timeoutMs: llm.timeoutMs } : {}
-    }
+    enabled: raw.enabled !== false
   };
 }
 var MEETING_DEFAULTS = {
@@ -1053,7 +855,7 @@ function numberOr(value, fallback) {
 
 // src/policy/workspace.ts
 import { realpath, stat } from "fs/promises";
-import { homedir as homedir2, tmpdir } from "os";
+import { homedir, tmpdir } from "os";
 import { basename, dirname, resolve } from "path";
 async function resolveWorkingDirectory(requestedCwd) {
   const trimmed = requestedCwd.trim();
@@ -1071,7 +873,7 @@ async function resolveWorkingDirectory(requestedCwd) {
     return reject("not-directory", requestedCwd, `\u8DEF\u5F84\u4E0D\u662F\u76EE\u5F55\uFF1A${resolved}`);
   }
   const tempRealpath = await realpath(tmpdir()).catch(() => resolve(tmpdir()));
-  const homeRealpath = await realpath(homedir2()).catch(() => resolve(homedir2()));
+  const homeRealpath = await realpath(homedir()).catch(() => resolve(homedir()));
   const broad = classifyHighRiskWorkingDirectory(resolved, requestedCwd, tempRealpath, homeRealpath);
   if (broad) return broad;
   return {
@@ -1124,7 +926,7 @@ function classifyHighRiskWorkingDirectory(real, requestedCwd, tempRealpath, home
 // src/cli/agent-detection.ts
 import { constants } from "fs";
 import { access } from "fs/promises";
-import { delimiter, extname, isAbsolute, join as join2 } from "path";
+import { delimiter, extname, isAbsolute, join } from "path";
 async function resolveExecutablePath(command) {
   if (isAbsolute(command)) {
     await access(command, constants.X_OK);
@@ -1143,10 +945,10 @@ async function resolveExecutablePath(command) {
   throw new Error(`executable not found: ${command}`);
 }
 function executableCandidates(dir, command) {
-  const candidates = [join2(dir, command)];
+  const candidates = [join(dir, command)];
   if (extname(command)) return candidates;
   for (const ext of pathExts()) {
-    candidates.push(join2(dir, `${command}${ext}`));
+    candidates.push(join(dir, `${command}${ext}`));
   }
   return candidates;
 }
@@ -1194,7 +996,7 @@ async function createBootstrapProfileConfig(input) {
     };
   }
   if (input.profileDir && profile2.codex?.inheritCodexHome === false) {
-    await mkdir(join3(input.profileDir, "codex-home"), { recursive: true });
+    await mkdir(join2(input.profileDir, "codex-home"), { recursive: true });
   }
   return profile2;
 }
@@ -1301,47 +1103,47 @@ async function promptPassword(prompt) {
 }
 
 // src/daemon/paths.ts
-import { homedir as homedir5 } from "os";
-import { join as join6 } from "path";
+import { homedir as homedir4 } from "os";
+import { join as join5 } from "path";
 import { createHash } from "crypto";
 
 // src/config/app-paths.ts
-import { homedir as homedir3 } from "os";
-import { join as join4 } from "path";
+import { homedir as homedir2 } from "os";
+import { join as join3 } from "path";
 var DEFAULT_PROFILE = "claude";
 function resolveAppPaths(opts = {}) {
-  const rootDir = opts.rootDir ?? process.env.LARK_CHANNEL_HOME ?? join4(homedir3(), ".lark-channel");
+  const rootDir = opts.rootDir ?? process.env.LARK_CHANNEL_HOME ?? join3(homedir2(), ".lark-channel");
   const profile2 = normalizeProfileName(opts.profile ?? DEFAULT_PROFILE);
-  const profileDir = join4(rootDir, "profiles", profile2);
-  const registryDir = join4(rootDir, "registry");
-  const userLockDir = join4(registryDir, "locks");
+  const profileDir = join3(rootDir, "profiles", profile2);
+  const registryDir = join3(rootDir, "registry");
+  const userLockDir = join3(registryDir, "locks");
   return {
     rootDir,
     profile: profile2,
     profileDir,
-    defaultWorkspaceDir: join4(`${rootDir}-workspaces`, profile2, "default"),
-    configFile: join4(rootDir, "config.json"),
-    activeProfileFile: join4(rootDir, "active-profile"),
-    sessionsFile: join4(profileDir, "sessions.json"),
-    workspacesFile: join4(profileDir, "workspaces.json"),
-    secretsFile: join4(profileDir, "secrets.enc"),
-    keystoreSaltFile: join4(profileDir, ".keystore.salt"),
-    secretsGetterScript: join4(rootDir, "secrets-getter"),
-    larkCliConfigDir: join4(profileDir, "lark-cli"),
-    larkCliSourceDir: join4(profileDir, "lark-cli-source"),
-    larkCliSourceConfigFile: join4(profileDir, "lark-cli-source", "config.json"),
-    larkCliTargetConfigFile: join4(profileDir, "lark-cli", "lark-channel", "config.json"),
-    mediaDir: join4(profileDir, "media"),
-    logsDir: join4(profileDir, "logs"),
-    uiFile: join4(profileDir, "ui.json"),
-    hostUiFile: join4(rootDir, "ui.json"),
-    hostLogsDir: join4(rootDir, "logs"),
-    hostLockFile: join4(userLockDir, "supervisor.lock"),
+    defaultWorkspaceDir: join3(`${rootDir}-workspaces`, profile2, "default"),
+    configFile: join3(rootDir, "config.json"),
+    activeProfileFile: join3(rootDir, "active-profile"),
+    sessionsFile: join3(profileDir, "sessions.json"),
+    workspacesFile: join3(profileDir, "workspaces.json"),
+    secretsFile: join3(profileDir, "secrets.enc"),
+    keystoreSaltFile: join3(profileDir, ".keystore.salt"),
+    secretsGetterScript: join3(rootDir, "secrets-getter"),
+    larkCliConfigDir: join3(profileDir, "lark-cli"),
+    larkCliSourceDir: join3(profileDir, "lark-cli-source"),
+    larkCliSourceConfigFile: join3(profileDir, "lark-cli-source", "config.json"),
+    larkCliTargetConfigFile: join3(profileDir, "lark-cli", "lark-channel", "config.json"),
+    mediaDir: join3(profileDir, "media"),
+    logsDir: join3(profileDir, "logs"),
+    uiFile: join3(profileDir, "ui.json"),
+    hostUiFile: join3(rootDir, "ui.json"),
+    hostLogsDir: join3(rootDir, "logs"),
+    hostLockFile: join3(userLockDir, "supervisor.lock"),
     registryDir,
-    userRegistryFile: join4(registryDir, "processes.json"),
+    userRegistryFile: join3(registryDir, "processes.json"),
     userLockDir,
-    profileLockFile: join4(userLockDir, "profile", `${profile2}.lock`),
-    appLockFile: (appId) => join4(userLockDir, "app", `${lockSafeName(appId)}.lock`)
+    profileLockFile: join3(userLockDir, "profile", `${profile2}.lock`),
+    appLockFile: (appId) => join3(userLockDir, "app", `${lockSafeName(appId)}.lock`)
   };
 }
 function normalizeProfileName(profile2) {
@@ -1357,8 +1159,8 @@ function lockSafeName(value) {
 }
 
 // src/config/paths.ts
-import { homedir as homedir4 } from "os";
-import { join as join5 } from "path";
+import { homedir as homedir3 } from "os";
+import { join as join4 } from "path";
 var appPaths = resolveAppPaths();
 var paths = {
   ...appPaths,
@@ -1375,12 +1177,12 @@ var paths = {
    */
 };
 var legacyPaths = {
-  appDir: join5(
-    process.env.XDG_CONFIG_HOME ?? join5(homedir4(), ".config"),
+  appDir: join4(
+    process.env.XDG_CONFIG_HOME ?? join4(homedir3(), ".config"),
     "lark-channel-bridge"
   ),
-  cacheDir: join5(
-    process.env.XDG_CACHE_HOME ?? join5(homedir4(), ".cache"),
+  cacheDir: join4(
+    process.env.XDG_CACHE_HOME ?? join4(homedir3(), ".cache"),
     "lark-channel-bridge"
   )
 };
@@ -1405,31 +1207,31 @@ function launchAgentLabel(profile2 = paths.profile) {
   return `ai.${serviceNameForProfile(profile2)}`;
 }
 function launchAgentPlistPath(profile2 = paths.profile) {
-  return join6(homedir5(), "Library", "LaunchAgents", `${launchAgentLabel(profile2)}.plist`);
+  return join5(homedir4(), "Library", "LaunchAgents", `${launchAgentLabel(profile2)}.plist`);
 }
 var SYSTEMD_UNIT_NAME = systemdUnitName();
 function systemdUnitName(profile2 = paths.profile) {
   return `${serviceNameForProfile(profile2)}.service`;
 }
 function systemdUnitPath(profile2 = paths.profile) {
-  const base = process.env.XDG_CONFIG_HOME ?? join6(homedir5(), ".config");
-  return join6(base, "systemd", "user", systemdUnitName(profile2));
+  const base = process.env.XDG_CONFIG_HOME ?? join5(homedir4(), ".config");
+  return join5(base, "systemd", "user", systemdUnitName(profile2));
 }
 var WINDOWS_TASK_NAME = windowsTaskName();
 function windowsTaskName(profile2 = paths.profile) {
   return `LarkChannelBridge.Bot.${serviceProfileId(profile2)}`;
 }
 function windowsLauncherCmdPath(profile2 = paths.profile) {
-  return join6(paths.appDir, "daemon", serviceProfileId(profile2), "launcher.cmd");
+  return join5(paths.appDir, "daemon", serviceProfileId(profile2), "launcher.cmd");
 }
 function daemonLogDir(profile2 = paths.profile) {
-  return join6(resolveAppPaths({ rootDir: paths.rootDir, profile: profile2 }).logsDir, "daemon");
+  return join5(resolveAppPaths({ rootDir: paths.rootDir, profile: profile2 }).logsDir, "daemon");
 }
 function daemonStdoutPath(profile2 = paths.profile) {
-  return join6(daemonLogDir(profile2), "daemon-stdout.log");
+  return join5(daemonLogDir(profile2), "daemon-stdout.log");
 }
 function daemonStderrPath(profile2 = paths.profile) {
-  return join6(daemonLogDir(profile2), "daemon-stderr.log");
+  return join5(daemonLogDir(profile2), "daemon-stderr.log");
 }
 
 // src/daemon/launchd.ts
@@ -1874,13 +1676,13 @@ import {
   writeFileSync
 } from "fs";
 import { mkdir as mkdir7, writeFile as writeFile5 } from "fs/promises";
-import { basename as basename3, dirname as dirname7, join as join8 } from "path";
+import { basename as basename3, dirname as dirname7, join as join7 } from "path";
 import * as lockfile2 from "proper-lockfile";
 
 // src/platform/atomic-write.ts
 import { randomBytes } from "crypto";
 import { chmod, mkdir as mkdir5, open, rm as rm4 } from "fs/promises";
-import { basename as basename2, dirname as dirname5, join as join7 } from "path";
+import { basename as basename2, dirname as dirname5, join as join6 } from "path";
 import { promisify } from "util";
 import gracefulFs from "graceful-fs";
 var gracefulRename = promisify(gracefulFs.rename);
@@ -1888,7 +1690,7 @@ var DEFAULT_RENAME_ATTEMPTS = 5;
 var DEFAULT_RETRY_DELAY_MS = 25;
 async function writeFileAtomic(path, data, opts = {}) {
   await mkdir5(dirname5(path), { recursive: true });
-  const tmp = join7(
+  const tmp = join6(
     dirname5(path),
     `.${basename2(path)}.tmp-${process.pid}-${Date.now()}-${randomBytes(3).toString("hex")}`
   );
@@ -1953,7 +1755,7 @@ function sleep(ms) {
 }
 
 // src/runtime/locks.ts
-import { chmod as chmod2, mkdir as mkdir6, readFile as readFile2, unlink, writeFile as writeFile4 } from "fs/promises";
+import { chmod as chmod2, mkdir as mkdir6, readFile, unlink, writeFile as writeFile4 } from "fs/promises";
 import { dirname as dirname6 } from "path";
 import * as lockfile from "proper-lockfile";
 var RuntimeLockConflictError = class extends Error {
@@ -1991,7 +1793,7 @@ function runtimeLockMetaFile(target) {
 }
 async function readRuntimeLockMeta(target) {
   try {
-    const parsed = JSON.parse(await readFile2(runtimeLockMetaFile(target), "utf8"));
+    const parsed = JSON.parse(await readFile(runtimeLockMetaFile(target), "utf8"));
     return isRuntimeLockMeta(parsed) ? parsed : void 0;
   } catch (err) {
     if (err.code === "ENOENT") return void 0;
@@ -2281,7 +2083,7 @@ function legacyRegistryFile(path) {
   if (basename3(path) !== "processes.json") return void 0;
   const parent = dirname7(path);
   if (basename3(parent) !== "registry") return void 0;
-  const legacy = join8(dirname7(parent), "processes.json");
+  const legacy = join7(dirname7(parent), "processes.json");
   return existsSync4(path) ? void 0 : legacy;
 }
 function fsyncDirSync(path) {
@@ -2428,21 +2230,21 @@ function padEndDisplay(s, target) {
 import {
   copyFile,
   mkdir as mkdir9,
-  readFile as readFile4,
+  readFile as readFile3,
   rename as rename2,
   rm as rm6,
   stat as stat3,
   writeFile as writeFile7
 } from "fs/promises";
-import { dirname as dirname9, join as join10 } from "path";
+import { dirname as dirname9, join as join9 } from "path";
 
 // src/config/profile-store.ts
-import { chmod as chmod3, mkdir as mkdir8, readFile as readFile3, rename, rm as rm5, rmdir, stat as stat2, writeFile as writeFile6 } from "fs/promises";
-import { dirname as dirname8, join as join9 } from "path";
+import { chmod as chmod3, mkdir as mkdir8, readFile as readFile2, rename, rm as rm5, rmdir, stat as stat2, writeFile as writeFile6 } from "fs/promises";
+import { dirname as dirname8, join as join8 } from "path";
 import * as lockfile3 from "proper-lockfile";
 async function loadRootConfig(path) {
   try {
-    const parsed = JSON.parse(await readFile3(path, "utf8"));
+    const parsed = JSON.parse(await readFile2(path, "utf8"));
     return isRootConfig(parsed) ? normalizeRootConfig(parsed) : void 0;
   } catch (err) {
     if (err.code === "ENOENT") return void 0;
@@ -2531,12 +2333,12 @@ async function withConfigFileLock(configPath, fn) {
   }
 }
 async function readActiveProfile(rootDir) {
-  const activeProfileFile = join9(
+  const activeProfileFile = join8(
     rootDir ?? process.env.LARK_CHANNEL_HOME ?? resolveAppPaths().rootDir,
     "active-profile"
   );
   try {
-    const text = await readFile3(activeProfileFile, "utf8");
+    const text = await readFile2(activeProfileFile, "utf8");
     const profile2 = text.trim();
     return profile2 || void 0;
   } catch (err) {
@@ -2545,7 +2347,7 @@ async function readActiveProfile(rootDir) {
   }
 }
 async function writeActiveProfile(rootDir, profile2) {
-  const activeProfileFile = join9(rootDir, "active-profile");
+  const activeProfileFile = join8(rootDir, "active-profile");
   await writeFileAtomic(activeProfileFile, `${profile2}
 `, { mode: 384 });
 }
@@ -2617,7 +2419,7 @@ async function removeProfile(root, profile2, rootDir, opts = {}) {
   const profileDir = resolveAppPaths({ rootDir, profile: profile2 }).profileDir;
   if (opts.purge) {
     if (!await pathExists(profileDir)) return { root: next, purged: true };
-    const trashDir2 = join9(rootDir, ".trash");
+    const trashDir2 = join8(rootDir, ".trash");
     await mkdir8(trashDir2, { recursive: true });
     const stagedTo = await nextArchivePath(trashDir2, profile2, opts.now?.() ?? /* @__PURE__ */ new Date());
     await rename(profileDir, stagedTo);
@@ -2635,7 +2437,7 @@ async function removeProfile(root, profile2, rootDir, opts = {}) {
       }
     };
   }
-  const trashDir = join9(rootDir, ".trash");
+  const trashDir = join8(rootDir, ".trash");
   await mkdir8(trashDir, { recursive: true });
   const archivedTo = await nextArchivePath(trashDir, profile2, opts.now?.() ?? /* @__PURE__ */ new Date());
   await rename(profileDir, archivedTo);
@@ -2648,7 +2450,7 @@ async function removeProfile(root, profile2, rootDir, opts = {}) {
   };
 }
 async function nextArchivePath(trashDir, profile2, now) {
-  const base = join9(trashDir, `${profile2}-${archiveTimestamp(now)}`);
+  const base = join8(trashDir, `${profile2}-${archiveTimestamp(now)}`);
   for (let suffix = 0; ; suffix++) {
     const candidate = suffix === 0 ? base : `${base}-${suffix}`;
     if (!await pathExists(candidate)) return candidate;
@@ -2696,7 +2498,7 @@ async function migrateV1ToV2(opts = {}) {
   const configFile = opts.configFile ?? paths2.configFile;
   let rawConfig;
   try {
-    rawConfig = await readFile4(configFile, "utf8");
+    rawConfig = await readFile3(configFile, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") {
       return { migrated: false, profile: profile2 };
@@ -2709,7 +2511,7 @@ async function migrateV1ToV2(opts = {}) {
   }
   await assertNoActiveOldProcesses([
     paths2.userRegistryFile,
-    join10(paths2.rootDir, "processes.json")
+    join9(paths2.rootDir, "processes.json")
   ]);
   const legacy = parsed;
   const app = legacy.accounts?.app ?? legacy.app;
@@ -2775,7 +2577,7 @@ async function assertNoActiveOldProcesses(registryFiles) {
 async function activeOldProcessesInFile(path) {
   let registry;
   try {
-    registry = JSON.parse(await readFile4(path, "utf8"));
+    registry = JSON.parse(await readFile3(path, "utf8"));
   } catch (err) {
     if (err.code === "ENOENT") return [];
     throw err;
@@ -2831,8 +2633,8 @@ function isAlive2(pid) {
 }
 async function moveStateEntries(rootDir, profileDir, moved) {
   for (const name of STATE_ENTRIES) {
-    const from = join10(rootDir, name);
-    const to = join10(profileDir, name);
+    const from = join9(rootDir, name);
+    const to = join9(profileDir, name);
     if (!await exists(from)) continue;
     if (await exists(to)) {
       throw new Error(`profile state already exists: ${to}`);
@@ -2859,7 +2661,7 @@ async function resolveBootstrapWorkspace2(workspace) {
 async function collectLegacyDefaultWorkspace(rootDir) {
   let parsed;
   try {
-    parsed = JSON.parse(await readFile4(join10(rootDir, "workspaces.json"), "utf8"));
+    parsed = JSON.parse(await readFile3(join9(rootDir, "workspaces.json"), "utf8"));
   } catch {
     return void 0;
   }
@@ -2956,11 +2758,11 @@ function getRunIdleTimeoutMs(cfg) {
 }
 
 // src/config/store.ts
-import { readFile as readFile5 } from "fs/promises";
+import { readFile as readFile4 } from "fs/promises";
 import { dirname as dirname10 } from "path";
 async function loadConfig(path = paths.configFile) {
   try {
-    const text = await readFile5(path, "utf8");
+    const text = await readFile4(path, "utf8");
     return JSON.parse(text);
   } catch (err) {
     if (err.code === "ENOENT") return {};
@@ -3111,7 +2913,7 @@ function formatActiveBridgeProcess(active2) {
 async function hasLegacyProfileConfig(path) {
   let raw;
   try {
-    raw = await readFile6(path, "utf8");
+    raw = await readFile5(path, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") return false;
     throw err;
@@ -3129,7 +2931,7 @@ async function migrateLegacyPaths() {
     console.log(`\u2713 \u5DF2\u642C\u8FC1\u914D\u7F6E\uFF1A${legacyPaths.appDir} \u2192 ${paths.appDir}`);
   }
   if (legacyCache) {
-    const legacyMedia = join11(legacyPaths.cacheDir, "media");
+    const legacyMedia = join10(legacyPaths.cacheDir, "media");
     if (await pathExists2(legacyMedia)) {
       await moveDirContents(legacyMedia, paths.mediaDir);
       await rmIfEmpty(legacyMedia);
@@ -3142,7 +2944,7 @@ async function migrateLegacyPaths() {
 async function migrateConfigShape(path) {
   let raw;
   try {
-    raw = await readFile6(path, "utf8");
+    raw = await readFile5(path, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") {
       console.log("  config.json \u4E0D\u5B58\u5728\uFF0C\u8DF3\u8FC7\u7ED3\u6784\u8FC1\u79FB");
@@ -3199,8 +3001,8 @@ async function moveDirContents(from, to) {
   }
   await mkdir10(to, { recursive: true });
   for (const name of entries) {
-    const src = join11(from, name);
-    const dst = join11(to, name);
+    const src = join10(from, name);
+    const dst = join10(to, name);
     if (await pathExists2(dst)) {
       console.log(`  \xB7 \u8DF3\u8FC7 ${name}\uFF08\u76EE\u6807\u5DF2\u5B58\u5728\uFF09`);
       continue;
@@ -3218,7 +3020,7 @@ async function rmIfEmpty(p3) {
 
 // src/config/keystore.ts
 import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes as randomBytes3 } from "crypto";
-import { readFile as readFile7 } from "fs/promises";
+import { readFile as readFile6 } from "fs/promises";
 import { hostname, userInfo as userInfo2 } from "os";
 var KEY_LEN = 32;
 var IV_LEN = 12;
@@ -3228,7 +3030,7 @@ var FILE_VERSION = 1;
 var derivedKeyCache = /* @__PURE__ */ new Map();
 async function readStore(storePaths = paths) {
   try {
-    const text = await readFile7(storePaths.secretsFile, "utf8");
+    const text = await readFile6(storePaths.secretsFile, "utf8");
     const parsed = JSON.parse(text);
     if (parsed?.version !== FILE_VERSION || !parsed.entries) return emptyStore();
     return { version: parsed.version, entries: { ...parsed.entries } };
@@ -3248,7 +3050,7 @@ async function writeStore(store, storePaths = paths) {
 }
 async function loadOrCreateSalt(storePaths = paths) {
   try {
-    const buf = await readFile7(storePaths.keystoreSaltFile);
+    const buf = await readFile6(storePaths.keystoreSaltFile);
     if (buf.length === KEY_LEN) return buf;
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
@@ -3317,7 +3119,7 @@ async function listSecretIds(storePaths = paths) {
 
 // src/runtime/profile-discovery.ts
 import { readdir as readdir2 } from "fs/promises";
-import { join as join12 } from "path";
+import { join as join11 } from "path";
 async function listAllProfiles(rootDir) {
   const rootPaths = resolveAppPaths({ rootDir });
   const root = await loadRootConfig(rootPaths.configFile);
@@ -3355,7 +3157,7 @@ async function listAllProfiles(rootDir) {
   });
 }
 async function readProfileStateDirs(rootDir) {
-  const profilesDir = join12(rootDir, "profiles");
+  const profilesDir = join11(rootDir, "profiles");
   try {
     const entries = await readdir2(profilesDir, { withFileTypes: true });
     return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
@@ -3366,7 +3168,7 @@ async function readProfileStateDirs(rootDir) {
 }
 async function isLogOnlyProfileState(rootDir, profile2) {
   try {
-    const entries = await readdir2(join12(rootDir, "profiles", profile2), { withFileTypes: true });
+    const entries = await readdir2(join11(rootDir, "profiles", profile2), { withFileTypes: true });
     return entries.length === 1 && entries[0]?.isDirectory() === true && entries[0].name === "logs";
   } catch {
     return false;
@@ -3514,8 +3316,8 @@ import { existsSync as existsSync5 } from "fs";
 import { rm as rm10 } from "fs/promises";
 
 // src/config/secret-resolver.ts
-import { readFile as readFile8 } from "fs/promises";
-import { join as join13 } from "path";
+import { readFile as readFile7 } from "fs/promises";
+import { join as join12 } from "path";
 var ENV_TEMPLATE_RE = /^\$\{([A-Z][A-Z0-9_]{0,127})\}$/;
 var DEFAULT_PROVIDER = "default";
 var DEFAULT_EXEC_TIMEOUT_MS = 5e3;
@@ -3571,8 +3373,8 @@ function resolveEnvRef(ref, pc) {
   return v;
 }
 async function resolveFileRef(ref, pc) {
-  const path = pc?.path ? join13(pc.path, ref.id) : ref.id;
-  const text = await readFile8(path, "utf8");
+  const path = pc?.path ? join12(pc.path, ref.id) : ref.id;
+  const text = await readFile7(path, "utf8");
   return text.trim();
 }
 async function resolveExecRef(ref, pc, appId, secretPaths) {
@@ -3680,7 +3482,7 @@ async function spawnExecProvider(pc, ref) {
 }
 
 // src/runtime/profile-runtime.ts
-import { mkdir as mkdir11, readFile as readFile10, realpath as realpath3 } from "fs/promises";
+import { mkdir as mkdir11, readFile as readFile9, realpath as realpath3 } from "fs/promises";
 import { dirname as dirname13 } from "path";
 import * as p from "@clack/prompts";
 
@@ -3760,7 +3562,7 @@ async function runRegistrationWizard() {
 import { AsyncLocalStorage } from "async_hooks";
 import { createWriteStream, mkdirSync as mkdirSync2 } from "fs";
 import { open as open2, readdir as readdir3, rm as rm8, stat as stat5 } from "fs/promises";
-import { join as join14 } from "path";
+import { join as join13 } from "path";
 
 // src/core/telemetry.ts
 var noop = {
@@ -3889,7 +3691,7 @@ function getStream() {
   }
   try {
     mkdirSync2(dir, { recursive: true });
-    stream = createWriteStream(join14(dir, logFileName(today)), { flags: "a" });
+    stream = createWriteStream(join13(dir, logFileName(today)), { flags: "a" });
     currentDate = today;
     return stream;
   } catch {
@@ -4277,7 +4079,7 @@ async function gcOldLogs() {
     const fileMs = Date.parse(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
     if (Number.isNaN(fileMs) || fileMs >= cutoff) continue;
     try {
-      await rm8(join14(dir, name));
+      await rm8(join13(dir, name));
       removed++;
     } catch {
     }
@@ -4328,13 +4130,13 @@ function sanitizeTelemetryError(err) {
 }
 
 // src/lark-cli/legacy-source-overlay.ts
-import { access as access2, readFile as readFile9, rm as rm9 } from "fs/promises";
-import { dirname as dirname12, join as join15 } from "path";
+import { access as access2, readFile as readFile8, rm as rm9 } from "fs/promises";
+import { dirname as dirname12, join as join14 } from "path";
 function legacyLarkCliSourceOverlayPaths(configFile) {
   const dir = dirname12(configFile);
   return {
-    backupFile: join15(dir, ".config.json.lark-cli-bind-backup"),
-    markerFile: join15(dir, ".config.json.lark-cli-bind-marker")
+    backupFile: join14(dir, ".config.json.lark-cli-bind-backup"),
+    markerFile: join14(dir, ".config.json.lark-cli-bind-marker")
   };
 }
 async function recoverLegacyLarkCliSourceOverlay(configFile) {
@@ -4366,7 +4168,7 @@ async function withLegacyLarkCliSourceOverlay(configFile, sourceConfigFile, fn) 
     const marker = { hadConfig: original !== void 0 };
     await writeFileAtomic(markerFile, `${JSON.stringify(marker, null, 2)}
 `, { mode: 384 });
-    const source = await readFile9(sourceConfigFile);
+    const source = await readFile8(sourceConfigFile);
     await writeFileAtomic(configFile, source, { mode: 384 });
     try {
       return await fn();
@@ -4385,7 +4187,7 @@ async function restoreLegacyLarkCliSourceOverlayUnlocked(configFile, markerArg) 
   if (!marker) return;
   const { backupFile, markerFile } = legacyLarkCliSourceOverlayPaths(configFile);
   if (marker.hadConfig) {
-    const backup = await readFile9(backupFile);
+    const backup = await readFile8(backupFile);
     await writeFileAtomic(configFile, backup, { mode: 384 });
   } else {
     await rm9(configFile, { force: true }).catch(() => {
@@ -4399,7 +4201,7 @@ async function restoreLegacyLarkCliSourceOverlayUnlocked(configFile, markerArg) 
 async function readMarker(configFile) {
   const { markerFile } = legacyLarkCliSourceOverlayPaths(configFile);
   try {
-    const parsed = JSON.parse(await readFile9(markerFile, "utf8"));
+    const parsed = JSON.parse(await readFile8(markerFile, "utf8"));
     return { hadConfig: parsed.hadConfig === true, ...parsed.profile ? { profile: parsed.profile } : {} };
   } catch (err) {
     if (err.code === "ENOENT") return void 0;
@@ -4408,7 +4210,7 @@ async function readMarker(configFile) {
 }
 async function readOptional(path) {
   try {
-    return await readFile9(path);
+    return await readFile8(path);
   } catch (err) {
     if (err.code === "ENOENT") return void 0;
     throw err;
@@ -4718,7 +4520,7 @@ function resolveBootstrapAgent(requestedAgent, profile2) {
 async function hasLegacyConfig(configPath) {
   let raw;
   try {
-    raw = await readFile10(configPath, "utf8");
+    raw = await readFile9(configPath, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") return false;
     throw err;
@@ -5179,10 +4981,10 @@ import { createInterface as createInterface2 } from "readline";
 
 // src/cli/preflight.ts
 import * as p2 from "@clack/prompts";
-import { readFile as readFile11 } from "fs/promises";
+import { readFile as readFile10 } from "fs/promises";
 
 // src/agent/lark-channel-env.ts
-import { join as join16 } from "path";
+import { join as join15 } from "path";
 function buildLarkChannelEnv(context) {
   const env = {
     LARK_CHANNEL: "1"
@@ -5191,7 +4993,7 @@ function buildLarkChannelEnv(context) {
   if (profile2) env.LARK_CHANNEL_PROFILE = profile2;
   const rootDir = nonEmpty(context?.rootDir);
   if (rootDir) env.LARK_CHANNEL_HOME = rootDir;
-  const configPath = nonEmpty(context?.larkCliSourceConfigFile) ?? nonEmpty(context?.configPath) ?? (rootDir ? join16(rootDir, "config.json") : void 0);
+  const configPath = nonEmpty(context?.larkCliSourceConfigFile) ?? nonEmpty(context?.configPath) ?? (rootDir ? join15(rootDir, "config.json") : void 0);
   if (configPath) env.LARK_CHANNEL_CONFIG = configPath;
   const larkCliConfigDir = nonEmpty(context?.larkCliConfigDir);
   if (larkCliConfigDir) env.LARKSUITE_CLI_CONFIG_DIR = larkCliConfigDir;
@@ -5555,7 +5357,7 @@ async function bindLarkCliWithCompatibility(profileArgs, larkChannelEnv, appPath
 }
 async function readPrivateTarget(appPaths2, cfg) {
   try {
-    const raw = JSON.parse(await readFile11(appPaths2.larkCliTargetConfigFile, "utf8"));
+    const raw = JSON.parse(await readFile10(appPaths2.larkCliTargetConfigFile, "utf8"));
     const app = raw.apps?.find(
       (candidate) => candidate.appId === cfg.accounts.app.id && candidate.brand === cfg.accounts.app.tenant
     );
@@ -5642,7 +5444,7 @@ async function readLocalSameAppUsers(output, cfg) {
   const configPath = parseLarkCliConfigPath(output);
   if (!configPath) return void 0;
   try {
-    const raw = JSON.parse(await readFile11(configPath, "utf8"));
+    const raw = JSON.parse(await readFile10(configPath, "utf8"));
     const app = raw.apps?.find(
       (candidate) => candidate.appId === cfg.accounts.app.id && candidate.brand === cfg.accounts.app.tenant
     );
@@ -5659,7 +5461,7 @@ function parseLarkCliConfigPath(output) {
 async function copyLocalUsersToPrivateTarget(appPaths2, cfg, users) {
   if (!hasStructuredLarkCliUserAuth(users)) return false;
   try {
-    const raw = JSON.parse(await readFile11(appPaths2.larkCliTargetConfigFile, "utf8"));
+    const raw = JSON.parse(await readFile10(appPaths2.larkCliTargetConfigFile, "utf8"));
     const app = raw.apps?.find(
       (candidate) => candidate.appId === cfg.accounts.app.id && candidate.brand === cfg.accounts.app.tenant
     );
@@ -6270,7 +6072,7 @@ import { createInterface as createInterface10 } from "readline";
 // src/agent/claude/adapter.ts
 import { mkdtempSync, rmSync, writeFileSync as writeFileSync2 } from "fs";
 import { tmpdir as tmpdir2 } from "os";
-import { join as join17 } from "path";
+import { join as join16 } from "path";
 import { createInterface as createInterface3 } from "readline";
 
 // src/agent/bridge-system-prompt.ts
@@ -6296,24 +6098,6 @@ var BRIDGE_SYSTEM_PROMPT = `# feishu-agent-bridge \u8FD0\u884C\u7EA6\u5B9A
 - \`mentions\`\uFF1A\u8FD9\u6761\u6D88\u606F @ \u5230\u7684\u8D26\u53F7\u5217\u8868\uFF08\u542B open_id \u548C isBot\uFF09\uFF0C\u9700\u8981 @ \u67D0\u4EBA/\u67D0 bot \u65F6\u4ECE\u8FD9\u91CC\u53D6 id
 
 \u591A\u6761\u6D88\u606F\u5728\u77ED\u65F6\u95F4\u5185\u5408\u5E76\u9001\u8FBE\u65F6\uFF0C\`user_input\` \u91CC\u6BCF\u6BB5\u4F1A\u5E26 \`[\u540D\u5B57 (user|bot)]:\` \u884C\u9996\u6807\u6CE8\u4EE5\u533A\u5206\u53D1\u9001\u8005\u2014\u2014\u8FD9\u662F bridge \u6CE8\u5165\u7684\u5C55\u793A\u683C\u5F0F\uFF0C**\u4F60\u56DE\u590D\u65F6\u4E0D\u8981\u6A21\u4EFF\u8FD9\u79CD\u6807\u6CE8**\u3002\u8FD9\u4E9B\u90FD\u662F bridge \u6CE8\u5165\u7684\u5143\u6570\u636E\uFF0C**\u4E0D\u8981\u7167\u6284\u3001\u4E0D\u8981\u5728\u4F60\u7684\u56DE\u590D\u91CC\u6E32\u67D3**\u2014\u2014\u5B83\u5BF9\u7528\u6237\u4E0D\u53EF\u89C1\u3002
-
-## compacted_context
-
-\u5982\u679C\u672C\u4F1A\u8BDD\u65E9\u671F\u5BF9\u8BDD\u88AB\u538B\u7F29\u8FC7\uFF0C\u6BCF\u6761 user message \u9876\u90E8\u4F1A\u5E26\u4E00\u4E2A \`<compacted_context>\` \u5757\uFF1A
-
-\`\`\`
-<compacted_context>
-\u4EE5\u4E0B\u662F\u672C\u4F1A\u8BDD\u65E9\u671F\u5BF9\u8BDD\u7684\u538B\u7F29\u6458\u8981\uFF08\u4E0D\u662F\u7528\u6237\u5F53\u524D\u8F93\u5165\uFF09\uFF1A
-\uFF08\u4E00\u6BB5 Markdown \u65E0\u5E8F\u5217\u8868\uFF0C\u6D53\u7F29\u4E86\u65E9\u671F\u5BF9\u8BDD\u7684\u8981\u70B9\uFF09
-</compacted_context>
-\`\`\`
-
-\u5B83\u662F bridge \u6CE8\u5165\u7684**\u65E9\u671F\u5BF9\u8BDD\u6D53\u7F29**\uFF0C\u5E2E\u52A9\u4F60\u5EF6\u7EED\u4E0A\u4E0B\u6587\uFF0C\u89C4\u5219\uFF1A
-
-- \u628A\u5B83\u5F53\u4F5C\u672C\u4F1A\u8BDD\u66F4\u65E9\u4E4B\u524D\u53D1\u751F\u8FC7\u7684\u5BF9\u8BDD\u80CC\u666F\uFF0C\u56DE\u7B54\u65F6\u81EA\u7136\u8854\u63A5
-- **\u5B83\u4E0D\u662F\u7528\u6237\u5F53\u524D\u8F93\u5165**\uFF1A\u7528\u6237\u771F\u6B63\u7684\u95EE\u9898/\u6D88\u606F\u5728\u5B83\u4E4B\u540E
-- \u6458\u8981\u91CC\u82E5\u63D0\u5230\u672A\u5B8C\u6210\u7684\u4EFB\u52A1\u6216\u5F85\u529E\uFF0C\u89C6\u4E3A\u4ECD\u9700\u7EE7\u7EED\u63A8\u8FDB\u7684\u4E8B\u9879
-- \u4E0D\u8981\u7167\u6284\u6458\u8981\u5185\u5BB9\u5230\u56DE\u590D\u91CC\uFF0C\u4E5F\u4E0D\u8981\u5411\u7528\u6237\u590D\u8FF0"\u8FD9\u662F\u6458\u8981"
 
 ## \u4E0E\u5176\u4ED6 bot \u534F\u4F5C\uFF08bot-at-bot\uFF09
 
@@ -6760,8 +6544,8 @@ async function* createEventStream(child, stderrChunks, getError) {
   }
 }
 function writeSystemPromptFile(content) {
-  const dir = mkdtempSync(join17(tmpdir2(), "lark-claude-"));
-  const path = join17(dir, "append-system-prompt.md");
+  const dir = mkdtempSync(join16(tmpdir2(), "lark-claude-"));
+  const path = join16(dir, "append-system-prompt.md");
   writeFileSync2(path, content, "utf8");
   return {
     path,
@@ -6779,7 +6563,7 @@ function isWindowsCommandNotFoundLine(line) {
 
 // src/agent/codex/adapter.ts
 import { createInterface as createInterface4 } from "readline";
-import { join as join18 } from "path";
+import { join as join17 } from "path";
 
 // src/runtime/errors.ts
 var RunRejected = class extends Error {
@@ -7116,7 +6900,7 @@ var CodexAdapter = class {
     if (this.codexHome) {
       envOverrides.CODEX_HOME = this.codexHome;
     } else if (!this.inheritCodexHome) {
-      envOverrides.CODEX_HOME = join18(this.profileStateDir, "codex-home");
+      envOverrides.CODEX_HOME = join17(this.profileStateDir, "codex-home");
     }
     const child = spawnProcess(this.binary, args, {
       cwd: opts.cwd,
@@ -7285,7 +7069,7 @@ function isWindowsCommandNotFoundLine2(line) {
 
 // src/bot/channel.ts
 import { createLarkChannel } from "@larksuite/channel";
-import { dirname as dirname18, join as join23 } from "path";
+import { dirname as dirname18, join as join21 } from "path";
 
 // src/agent/capability.ts
 function claudeCapability(profile2) {
@@ -7478,8 +7262,8 @@ function safeJsonStringify(value) {
 
 // src/commands/index.ts
 import { randomUUID } from "crypto";
-import { readFile as readFile14 } from "fs/promises";
-import { homedir as homedir7 } from "os";
+import { readFile as readFile12 } from "fs/promises";
+import { homedir as homedir6 } from "os";
 import { dirname as dirname16, isAbsolute as isAbsolute2 } from "path";
 
 // src/card/account-cards.ts
@@ -8289,137 +8073,103 @@ function escapeCode(s) {
   return s.replace(/`/g, "'");
 }
 
-// src/session/compact.ts
-import { createHash as createHash2 } from "crypto";
-import { readFile as readFile12 } from "fs/promises";
-import { join as join19 } from "path";
-var MAX_ENTRIES_PER_SCOPE = 2e3;
-var MAX_ENTRY_CHARS = 8e3;
-function isEntry(value) {
-  if (!value || typeof value !== "object") return false;
-  const entry = value;
-  return typeof entry.ts === "number" && (entry.role === "user" || entry.role === "assistant") && typeof entry.text === "string";
+// src/session/compact-llm.ts
+import { spawn } from "child_process";
+var DEFAULT_COMPACT_TIMEOUT_MS = 3e4;
+async function runNativeCompact(input) {
+  const { adapter, sessionId, command, cwd, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
+  const run = adapter.run({
+    runId: `compact-native-${Math.random().toString(36).slice(2, 10)}`,
+    prompt: command,
+    sessionId,
+    ...cwd ? { cwd } : {},
+    permissionMode: "bypassPermissions",
+    stopGraceMs: 5e3
+  });
+  let error;
+  const finished = (async () => {
+    for await (const evt of run.events) {
+      if (evt.type === "error") {
+        error = evt.message;
+        break;
+      }
+    }
+  })();
+  let timer;
+  const timedOut = new Promise((_, reject4) => {
+    timer = setTimeout(() => {
+      void run.stop().catch(() => void 0);
+      reject4(new Error(`${adapter.displayName} \u539F\u751F\u538B\u7F29\u8D85\u65F6\uFF08${timeoutMs}ms\uFF09`));
+    }, timeoutMs);
+  });
+  try {
+    await Promise.race([finished, timedOut]);
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (error) throw new Error(`${adapter.displayName} \u539F\u751F\u538B\u7F29\u5931\u8D25\uFF1A${error}`);
+  return true;
 }
-function clipText(text) {
-  const trimmed = text.replace(/\s+/g, " ").trim();
-  return trimmed.length > MAX_ENTRY_CHARS ? `${trimmed.slice(0, MAX_ENTRY_CHARS)}\u2026` : trimmed;
+function runCli(binary, args, timeoutMs) {
+  return new Promise((resolve2, reject4) => {
+    const child = spawn(binary, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (c) => stdout += c.toString("utf8"));
+    child.stderr.on("data", (c) => stderr += c.toString("utf8"));
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject4(new Error(`openclaw \u547D\u4EE4\u8D85\u65F6\uFF08${timeoutMs}ms\uFF09: openclaw ${args.join(" ")}`));
+    }, timeoutMs);
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject4(err);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve2({ code: code ?? -1, stdout, stderr });
+    });
+  });
 }
-var CompactStore = class {
-  constructor(dir) {
-    this.dir = dir;
+async function compactOpenClawSession(input) {
+  const { binary, agentId, sessionId, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
+  const list = await runCli(binary, ["sessions", "list", "--json"], timeoutMs);
+  if (list.code !== 0) {
+    throw new Error(`openclaw sessions list \u5931\u8D25\uFF08${list.code}\uFF09: ${list.stderr.trim().slice(0, 200)}`);
   }
-  dir;
-  states = /* @__PURE__ */ new Map();
-  saves = /* @__PURE__ */ new Map();
-  fileFor(scope) {
-    const hash = createHash2("sha1").update(scope).digest("hex").slice(0, 16);
-    return join19(this.dir, `${hash}.json`);
+  if (!list.stdout.trim()) {
+    throw new Error("openclaw sessions list \u8FD4\u56DE\u7A7A\u8F93\u51FA\uFF08exit 0\uFF09\u2014\u2014\u8BF7\u786E\u8BA4 openclaw gateway \u53EF\u7528");
   }
-  async loadState(scope) {
-    try {
-      const text = await readFile12(this.fileFor(scope), "utf8");
-      const raw = JSON.parse(text);
-      return {
-        entries: Array.isArray(raw.entries) ? raw.entries.filter(isEntry).slice(-MAX_ENTRIES_PER_SCOPE) : [],
-        ...typeof raw.summary === "string" && raw.summary.trim() ? { summary: raw.summary } : {},
-        ...typeof raw.summaryAt === "number" ? { summaryAt: raw.summaryAt } : {},
-        ...typeof raw.summaryRounds === "number" ? { summaryRounds: raw.summaryRounds } : {}
-      };
-    } catch (err) {
-      if (err.code === "ENOENT") return { entries: [] };
-      throw err;
-    }
+  let sessions2 = [];
+  try {
+    const parsed = JSON.parse(list.stdout);
+    sessions2 = Array.isArray(parsed) ? parsed : parsed?.sessions ?? [];
+  } catch {
+    throw new Error("openclaw sessions list \u8F93\u51FA\u65E0\u6CD5\u89E3\u6790");
   }
-  async stateFor(scope) {
-    const hit = this.states.get(scope);
-    if (hit && !(hit instanceof Promise)) return hit;
-    if (hit) return hit;
-    const loading = this.loadState(scope);
-    this.states.set(scope, loading);
-    try {
-      const state = await loading;
-      this.states.set(scope, state);
-      return state;
-    } catch (err) {
-      this.states.delete(scope);
-      throw err;
-    }
+  const match = sessions2.find((s) => s.sessionId === sessionId);
+  if (!match?.key) {
+    throw new Error(`\u627E\u4E0D\u5230 openclaw \u4F1A\u8BDD\uFF08sessionId=${sessionId}\uFF09\uFF0C\u53EF\u80FD\u5DF2\u6E05\u7406\uFF0C\u8BF7\u5148\u804A\u51E0\u8F6E`);
   }
-  persist(scope, state) {
-    const path = this.fileFor(scope);
-    const prev = this.saves.get(scope) ?? Promise.resolve();
-    const next = prev.then(() => writeFileAtomic(path, `${JSON.stringify(state, null, 2)}
-`, { mode: 384 })).catch((err) => log.fail("compact", err, { scope, step: "persist" }));
-    this.saves.set(scope, next);
+  const compact = await runCli(
+    binary,
+    ["sessions", "compact", match.key, "--agent", agentId],
+    timeoutMs
+  );
+  if (compact.code !== 0) {
+    if (/already compacted/i.test(compact.stdout + compact.stderr)) return true;
+    throw new Error(
+      `openclaw sessions compact \u5931\u8D25\uFF08${compact.code}\uFF09: ${(compact.stderr || compact.stdout).trim().slice(0, 200)}`
+    );
   }
-  async append(scope, role, text) {
-    const clipped = clipText(text);
-    if (!clipped) return;
-    const state = await this.stateFor(scope);
-    state.entries.push({ ts: Date.now(), role, text: clipped });
-    if (state.entries.length > MAX_ENTRIES_PER_SCOPE) {
-      state.entries.splice(0, state.entries.length - MAX_ENTRIES_PER_SCOPE);
-    }
-    this.persist(scope, state);
-  }
-  /** Record a user message for this scope (oldest → newest order). */
-  async appendUser(scope, text) {
-    await this.append(scope, "user", text);
-  }
-  /** Record the assistant's final reply for this scope. */
-  async appendAssistant(scope, text) {
-    await this.append(scope, "assistant", text);
-  }
-  /** Current uncompacted entries for this scope (oldest → newest). */
-  async entries(scope) {
-    const state = await this.stateFor(scope);
-    return state.entries.slice();
-  }
-  /** The currently active compaction summary, if any. */
-  async summary(scope) {
-    const state = await this.stateFor(scope);
-    return state.summary;
-  }
-  /**
-   * Fold `entries[0..keepFrom)` into a new summary and keep the rest.
-   * `summary` is the merged output of the summary LLM (old summary + removed
-   * portion). Returns stats for the confirmation reply.
-   */
-  async applyCompaction(scope, keepFrom, summary) {
-    const state = await this.stateFor(scope);
-    const removed = state.entries.slice(0, keepFrom);
-    const kept = state.entries.slice(keepFrom);
-    const removedRounds = removed.filter((entry) => entry.role === "user").length;
-    const removedChars = removed.reduce((total, entry) => total + entry.text.length, 0);
-    state.entries = kept;
-    state.summary = summary.trim();
-    state.summaryAt = Date.now();
-    state.summaryRounds = (state.summaryRounds ?? 0) + removedRounds;
-    this.persist(scope, state);
-    return {
-      removedRounds,
-      removedChars,
-      keptRounds: kept.filter((entry) => entry.role === "user").length,
-      summaryChars: summary.trim().length
-    };
-  }
-  /** Wipe all recorded history + summary (used by /new). */
-  async reset(scope) {
-    const state = await this.stateFor(scope);
-    state.entries = [];
-    delete state.summary;
-    delete state.summaryAt;
-    delete state.summaryRounds;
-    this.persist(scope, state);
-  }
-  /** Await all pending writes (used on shutdown / tests). */
-  async flush() {
-    await Promise.all(this.saves.values());
-  }
-};
+  log.info("compact", "openclaw-done", { key: match.key });
+  return true;
+}
 
 // src/policy/fingerprint.ts
-import { createHash as createHash3 } from "crypto";
+import { createHash as createHash2 } from "crypto";
 
 // src/session/jcs.ts
 function canonicalizeJcs(value) {
@@ -8482,7 +8232,7 @@ function attachmentPolicyConfigDigest(input) {
   });
 }
 function digestCanonical(value) {
-  return createHash3("sha256").update(canonicalizeJcs(value)).digest().subarray(0, 16).toString("base64url");
+  return createHash2("sha256").update(canonicalizeJcs(value)).digest().subarray(0, 16).toString("base64url");
 }
 
 // src/policy/access.ts
@@ -9070,8 +8820,8 @@ function finalizeIfRunning(state) {
 // src/session/history.ts
 import { createReadStream } from "fs";
 import { readdir as readdir4, stat as stat6 } from "fs/promises";
-import { homedir as homedir6 } from "os";
-import { join as join20 } from "path";
+import { homedir as homedir5 } from "os";
+import { join as join18 } from "path";
 import { createInterface as createInterface5 } from "readline";
 
 // src/session/preview.ts
@@ -9110,7 +8860,7 @@ function encodeCwd(cwd) {
   return cwd.replace(/[^A-Za-z0-9]/g, "-");
 }
 function claudeProjectDir(cwd) {
-  return join20(homedir6(), ".claude", "projects", encodeCwd(cwd));
+  return join18(homedir5(), ".claude", "projects", encodeCwd(cwd));
 }
 async function listRecentSessions(cwd, limit = 5) {
   const dir = claudeProjectDir(cwd);
@@ -9124,7 +8874,7 @@ async function listRecentSessions(cwd, limit = 5) {
   const jsonls = files.filter((f) => f.endsWith(".jsonl"));
   const withStats = await Promise.all(
     jsonls.map(async (f) => {
-      const path = join20(dir, f);
+      const path = join18(dir, f);
       try {
         const st = await stat6(path);
         return { file: f, path, mtime: st.mtimeMs };
@@ -9195,7 +8945,7 @@ function formatRelTime(mtime) {
 
 // src/session/codex-history.ts
 import { createInterface as createInterface6 } from "readline";
-import { join as join21 } from "path";
+import { join as join19 } from "path";
 var CodexHistoryError = class extends Error {
   code;
   constructor(code, message, options) {
@@ -9310,7 +9060,7 @@ function spawnCodexAppServer(options) {
   if (options.codexHome) {
     envOverrides.CODEX_HOME = options.codexHome;
   } else if (options.inheritCodexHome === false) {
-    envOverrides.CODEX_HOME = join21(options.profileStateDir, "codex-home");
+    envOverrides.CODEX_HOME = join19(options.profileStateDir, "codex-home");
   }
   return spawnProcess(options.binary, ["app-server", "--listen", "stdio://"], {
     env: mergeProcessEnv(process.env, envOverrides),
@@ -9410,7 +9160,7 @@ function errorMessage3(err) {
 }
 
 // src/ui/sidecar.ts
-import { readFile as readFile13, rm as rm11 } from "fs/promises";
+import { readFile as readFile11, rm as rm11 } from "fs/promises";
 import { dirname as dirname15 } from "path";
 import { mkdir as mkdir13 } from "fs/promises";
 async function writeUiSidecar(uiFile, handle2, startedAt) {
@@ -9427,7 +9177,7 @@ async function writeUiSidecar(uiFile, handle2, startedAt) {
 }
 async function readUiSidecar(uiFile) {
   try {
-    const parsed = JSON.parse(await readFile13(uiFile, "utf8"));
+    const parsed = JSON.parse(await readFile11(uiFile, "utf8"));
     if (!parsed.url || !parsed.token || typeof parsed.port !== "number") return void 0;
     return parsed;
   } catch {
@@ -10624,8 +10374,8 @@ function isMessageAuditReject(err) {
   return /not pass the audit/i.test(message);
 }
 function expandTilde(p3) {
-  if (p3 === "~") return homedir7();
-  if (p3.startsWith("~/")) return `${homedir7()}${p3.slice(1)}`;
+  if (p3 === "~") return homedir6();
+  if (p3.startsWith("~/")) return `${homedir6()}${p3.slice(1)}`;
   return p3;
 }
 function isAbsoluteOrTilde(p3) {
@@ -10645,148 +10395,117 @@ async function handleNew(args, ctx) {
     });
   }
   ctx.sessions.clear(ctx.scope);
-  await ctx.compactStore?.reset(ctx.scope).catch(
-    (err) => log.warn("compact", "reset-failed", { err: String(err) })
-  );
   await reply(ctx, wasRunning ? "\u5DF2\u4E2D\u65AD\u5F53\u524D\u4EFB\u52A1\u5E76\u5F00\u59CB\u65B0\u4F1A\u8BDD\u3002" : "\u5DF2\u5F00\u59CB\u65B0\u4F1A\u8BDD\u3002");
 }
 async function handleCompact(args, ctx) {
   const cfg = ctx.controls.profileConfig.compaction;
-  const store = ctx.compactStore;
-  if (!store) {
-    await reply(ctx, "\u274C \u5F53\u524D\u8FD0\u884C\u73AF\u5883\u672A\u542F\u7528\u4E0A\u4E0B\u6587\u538B\u7F29\uFF08\u7F3A\u5C11 compact store\uFF09\u3002");
-    return;
-  }
   if (!cfg.enabled) {
     await reply(ctx, "\u274C \u4E0A\u4E0B\u6587\u538B\u7F29\u5DF2\u505C\u7528\uFF08\u914D\u7F6E compaction.enabled=false\uFF09\u3002");
     return;
   }
   const argTrimmed = args.trim();
+  const cwd = effectiveWorkspaceCwd(ctx);
+  const timeoutMs = 6e4;
   if (ctx.agent.id === "claude") {
     const sessionId = ctx.sessions.getRaw(ctx.scope)?.sessionId;
-    if (sessionId) {
-      const focus = argTrimmed || void 0;
-      log.info("compact", "native-claude", { scope: ctx.scope, focus: focus ?? "" });
-      try {
-        await summarizeViaClaudeNative({
-          adapter: ctx.agent,
-          sessionId,
-          cwd: effectiveWorkspaceCwd(ctx),
-          focus,
-          timeoutMs: cfg.llm.timeoutMs
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        log.warn("compact", "native-claude-failed", { scope: ctx.scope, err: msg });
-        await reply(ctx, `\u274C Claude \u539F\u751F\u538B\u7F29\u5931\u8D25\uFF1A${msg}
+    if (!sessionId) {
+      await reply(ctx, "\u5F53\u524D claude \u4F1A\u8BDD\u8FD8\u6CA1\u6709\u53EF\u538B\u7F29\u7684\u5BF9\u8BDD\uFF0C\u5148\u804A\u51E0\u8F6E\u518D\u53D1 `/compact`\u3002");
+      return;
+    }
+    const focus = argTrimmed || void 0;
+    log.info("compact", "native-claude", { scope: ctx.scope, focus: focus ?? "" });
+    try {
+      await runNativeCompact({
+        adapter: ctx.agent,
+        sessionId,
+        command: focus ? `/compact ${focus}` : "/compact",
+        cwd,
+        timeoutMs
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn("compact", "native-claude-failed", { scope: ctx.scope, err: msg });
+      await reply(ctx, `\u274C Claude \u539F\u751F\u538B\u7F29\u5931\u8D25\uFF1A${msg}
 
 \uFF08\u4F1A\u8BDD\u672A\u6539\u52A8\uFF0C\u53EF\u91CD\u8BD5\uFF09`);
-        return;
-      }
-      await store.reset(ctx.scope).catch(
-        (err) => log.warn("compact", "reset-after-native-failed", { err: String(err) })
-      );
-      await reply(
-        ctx,
-        `\u2705 \u5DF2\u7528 **Claude \u539F\u751F /compact** \u538B\u7F29\u5F53\u524D\u4F1A\u8BDD\uFF08\u7B49\u6548\u4E8E\u5728\u7EC8\u7AEF\u6267\u884C \`claude -p --resume "/compact"\`\uFF09\u3002
+      return;
+    }
+    await reply(
+      ctx,
+      `\u2705 \u5DF2\u7528 **Claude \u539F\u751F /compact** \u538B\u7F29\u5F53\u524D\u4F1A\u8BDD\uFF08\u7B49\u6548\u7EC8\u7AEF\u6267\u884C \`claude -p --resume "/compact"\`\uFF09\u3002
 
 \u4E4B\u540E\u7684\u6D88\u606F\u4F1A\u5E26\u7740\u538B\u7F29\u540E\u7684\u4E0A\u4E0B\u6587\u7EE7\u7EED\u3002` + (focus ? `
-\u7126\u70B9\u6307\u4EE4\uFF1A\`${focus}\`` : "") + "\n\n> \u{1F4A1} \u5176\u4ED6 agent\uFF08mimo/opencode \u7B49\uFF09\u6CA1\u6709\u539F\u751F\u538B\u7F29\u547D\u4EE4\uFF0C\u8D70\u6865\u7684\u6458\u8981\u65B9\u6848\u3002"
-      );
-      return;
-    }
-  }
-  let keepRounds = cfg.keepRounds;
-  if (argTrimmed) {
-    const parsed = Number(argTrimmed);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      await reply(ctx, "\u274C \u7528\u6CD5\uFF1A`/compact [N]`\uFF0CN = \u4FDD\u7559\u7684\u6700\u8FD1\u5BF9\u8BDD\u8F6E\u6570\uFF08\u975E\u8D1F\u6574\u6570\uFF09\u3002");
-      return;
-    }
-    keepRounds = Math.floor(parsed);
-  }
-  const entries = await store.entries(ctx.scope);
-  if (entries.length === 0) {
-    await reply(ctx, "\u5F53\u524D\u4F1A\u8BDD\u8FD8\u6CA1\u6709\u53EF\u538B\u7F29\u7684\u5BF9\u8BDD\u8BB0\u5F55\uFF08\u53D1\u9001\u8FC7\u6D88\u606F\u540E\u624D\u4F1A\u5F00\u59CB\u8BB0\u5F55\uFF09\u3002");
+\u7126\u70B9\u6307\u4EE4\uFF1A\`${focus}\`` : "")
+    );
     return;
   }
-  const userIndexes = entries.map((entry, index) => entry.role === "user" ? index : -1).filter((index) => index >= 0);
-  const keepFrom = keepRounds <= 0 ? entries.length : userIndexes[userIndexes.length - keepRounds] ?? 0;
-  const removed = entries.slice(0, keepFrom);
-  const removedRounds = removed.filter((entry) => entry.role === "user").length;
-  if (removedRounds === 0) {
-    const kept = entries.filter((entry) => entry.role === "user").length;
-    await reply(ctx, `\u5F53\u524D\u4F1A\u8BDD\u53EA\u6709\u6700\u8FD1 ${kept} \u8F6E\u5BF9\u8BDD\uFF0C\u65E0\u9700\u538B\u7F29\uFF08\u4FDD\u7559\u9608\u503C ${keepRounds} \u8F6E\uFF09\u3002`);
-    return;
-  }
-  const oldSummary = await store.summary(ctx.scope);
-  const transcript = removed.map((entry) => `${entry.role === "user" ? "\u7528\u6237" : "\u52A9\u624B"}\uFF1A${entry.text}`).join("\n\n");
-  const apiKey = await resolveCompactApiKey(cfg.llm.apiKey);
-  const compactCwd = effectiveWorkspaceCwd(ctx);
-  log.info("compact", "start", {
-    scope: ctx.scope,
-    removedRounds,
-    removedChars: removed.reduce((total, entry) => total + entry.text.length, 0),
-    keepRounds,
-    model: apiKey ? cfg.llm.model : `agent:${ctx.agent.id}`
-  });
-  let summary;
-  let usedAgent = false;
-  try {
-    if (apiKey) {
-      summary = await summarizeConversation({
-        baseUrl: cfg.llm.baseUrl,
-        model: cfg.llm.model,
-        apiKey,
-        oldSummary,
-        transcript,
-        timeoutMs: cfg.llm.timeoutMs
-      });
-    } else if (ctx.agent) {
-      usedAgent = true;
-      summary = await summarizeViaAgent({
+  if (ctx.agent.id === "mimo") {
+    const sessionId = ctx.sessionCatalog?.sessionIdFor(ctx.scope, "mimo");
+    if (!sessionId) {
+      await reply(ctx, "\u5F53\u524D mimo \u4F1A\u8BDD\u8FD8\u6CA1\u6709\u53EF\u538B\u7F29\u7684\u5BF9\u8BDD\uFF0C\u5148\u804A\u51E0\u8F6E\u518D\u53D1 `/compact`\u3002");
+      return;
+    }
+    log.info("compact", "native-mimo", { scope: ctx.scope });
+    try {
+      await runNativeCompact({
         adapter: ctx.agent,
-        cwd: compactCwd,
-        oldSummary,
-        transcript,
-        timeoutMs: cfg.llm.timeoutMs
+        sessionId,
+        command: "/compact",
+        cwd,
+        timeoutMs
       });
-    } else {
-      await reply(
-        ctx,
-        "\u274C \u627E\u4E0D\u5230\u53EF\u7528\u7684\u6458\u8981\u9014\u5F84\uFF1A\u65E2\u6CA1\u6709\u914D\u7F6E\u6458\u8981\u6A21\u578B API key\uFF0C\u5F53\u524D\u4E5F\u6CA1\u6709\u53EF\u7528 agent\u3002\n\n\u8BF7\u914D\u7F6E `compaction.llm.apiKey`\uFF08OpenAI \u517C\u5BB9\u7AEF\u70B9\uFF09\u540E\u91CD\u8BD5\u3002"
-      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn("compact", "native-mimo-failed", { scope: ctx.scope, err: msg });
+      await reply(ctx, `\u274C mimo \u539F\u751F\u538B\u7F29\u5931\u8D25\uFF1A${msg}
+
+\uFF08\u4F1A\u8BDD\u672A\u6539\u52A8\uFF0C\u53EF\u91CD\u8BD5\uFF09`);
       return;
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log.warn("compact", "llm-failed", { scope: ctx.scope, err: msg });
-    await reply(ctx, `\u274C \u538B\u7F29\u5931\u8D25\uFF1A${msg}
-
-\uFF08\u4F1A\u8BDD\u8BB0\u5F55\u672A\u6539\u52A8\uFF0C\u53EF\u91CD\u8BD5\uFF09`);
+    await reply(
+      ctx,
+      '\u2705 \u5DF2\u7528 **mimo \u539F\u751F /compact** \u538B\u7F29\u5F53\u524D\u4F1A\u8BDD\uFF08\u7B49\u6548\u7EC8\u7AEF\u6267\u884C `mimo run --session <id> "/compact"`\uFF09\u3002\n\n\u4E4B\u540E\u7684\u6D88\u606F\u4F1A\u5E26\u7740\u538B\u7F29\u540E\u7684\u4E0A\u4E0B\u6587\u7EE7\u7EED\u3002'
+    );
     return;
   }
-  const result = await store.applyCompaction(ctx.scope, keepFrom, summary);
-  log.info("compact", "done", {
-    scope: ctx.scope,
-    removedRounds: result.removedRounds,
-    keptRounds: result.keptRounds,
-    summaryChars: result.summaryChars
-  });
-  const preview2 = summary.length > 400 ? `${summary.slice(0, 400)}\u2026` : summary;
-  const usedNote = usedAgent ? `
+  if (ctx.agent.id === "openclaw") {
+    const oc = ctx.controls.profileConfig.openclaw;
+    const sessionId = ctx.sessionCatalog?.sessionIdFor(ctx.scope, "openclaw");
+    if (!oc?.binaryPath) {
+      await reply(ctx, "\u274C \u7F3A\u5C11 openclaw \u914D\u7F6E\uFF08openclaw.binaryPath\uFF09\u3002");
+      return;
+    }
+    if (!sessionId) {
+      await reply(ctx, "\u5F53\u524D openclaw \u4F1A\u8BDD\u8FD8\u6CA1\u6709\u53EF\u538B\u7F29\u7684\u5BF9\u8BDD\uFF0C\u5148\u804A\u51E0\u8F6E\u518D\u53D1 `/compact`\u3002");
+      return;
+    }
+    log.info("compact", "native-openclaw", { scope: ctx.scope });
+    try {
+      await compactOpenClawSession({
+        binary: oc.binaryPath,
+        agentId: oc.agentId,
+        sessionId,
+        timeoutMs
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn("compact", "native-openclaw-failed", { scope: ctx.scope, err: msg });
+      await reply(ctx, `\u274C openclaw \u539F\u751F\u538B\u7F29\u5931\u8D25\uFF1A${msg}
 
-> \u2699\uFE0F \u672A\u914D\u7F6E\u6458\u8981\u6A21\u578B key\uFF0C\u672C\u6B21\u81EA\u52A8\u7528\u5F53\u524D agent\u300C${ctx.agent.displayName}\u300D\u538B\u7F29\uFF08\u96F6\u914D\u7F6E\uFF0C\u7A0D\u6162\uFF09\u3002
-> \u60F3\u66F4\u5FEB\u53EF\u914D \`compaction.llm\`\uFF08OpenAI \u517C\u5BB9\u7AEF\u70B9\uFF09\u3002` : "";
+\uFF08\u4F1A\u8BDD\u672A\u6539\u52A8\uFF0C\u53EF\u91CD\u8BD5\uFF09`);
+      return;
+    }
+    await reply(
+      ctx,
+      "\u2705 \u5DF2\u7528 **openclaw sessions compact** \u538B\u7F29\u5F53\u524D\u4F1A\u8BDD\uFF08\u7B49\u6548\u7EC8\u7AEF\u6267\u884C `openclaw sessions compact <key>`\uFF09\u3002\n\n\u4E4B\u540E\u7684\u6D88\u606F\u4F1A\u5E26\u7740\u538B\u7F29\u540E\u7684\u4E0A\u4E0B\u6587\u7EE7\u7EED\u3002"
+    );
+    return;
+  }
   await reply(
     ctx,
-    `\u2705 \u5DF2\u538B\u7F29 **${result.removedRounds}** \u8F6E\u5BF9\u8BDD\uFF08\u4FDD\u7559\u6700\u8FD1 ${result.keptRounds} \u8F6E\uFF09
+    `\u274C ${ctx.agent.displayName} \u7684 headless CLI \u6CA1\u6709\u538B\u7F29\u547D\u4EE4\uFF08\u5B9E\u6D4B \`/compact\` \u4F1A\u88AB\u5F53\u666E\u901A\u6D88\u606F\u53D1\u7ED9\u6A21\u578B\uFF09\uFF0C\u65E0\u6CD5\u900F\u4F20\u538B\u7F29\u3002
 
-\u{1F4CB} \u65E9\u671F\u5BF9\u8BDD\u6458\u8981\uFF1A
-${preview2}
-
-\u4E4B\u540E\u7684\u5BF9\u8BDD\uFF0Cagent \u4F1A\u81EA\u52A8\u643A\u5E26\u8FD9\u4EFD\u6458\u8981\u7EE7\u7EED\uFF0C\u4E0A\u4E0B\u6587\u4E0D\u518D\u65E0\u9650\u81A8\u80C0\u3002
-\u5982\u9700\u8C03\u6574\u4FDD\u7559\u8F6E\u6570\uFF1A\`/compact 10\`\uFF08\u4FDD\u7559\u6700\u8FD1 10 \u8F6E\uFF09\u3002${usedNote}`
+\u5F53\u524D\u652F\u6301\u539F\u751F\u538B\u7F29\u7684 agent\uFF1Aclaude / mimo / openclaw\u3002`
   );
 }
 async function handleNewChat(rawName, ctx) {
@@ -11183,7 +10902,7 @@ function runtimeAccessStatus(profileConfig) {
 async function larkCliStatus(ctx) {
   const appPaths2 = commandProfilePaths(ctx);
   try {
-    const raw = JSON.parse(await readFile14(appPaths2.larkCliTargetConfigFile, "utf8"));
+    const raw = JSON.parse(await readFile12(appPaths2.larkCliTargetConfigFile, "utf8"));
     const app = raw.apps?.find(
       (candidate) => candidate.appId === ctx.controls.profileConfig.accounts.app.id && candidate.brand === ctx.controls.profileConfig.accounts.app.tenant
     );
@@ -12755,7 +12474,7 @@ function signatureMatches(actual, expected) {
 }
 
 // src/card/callback-store.ts
-import { readFile as readFile15 } from "fs/promises";
+import { readFile as readFile13 } from "fs/promises";
 var CallbackNonceStore = class {
   path;
   nonces = /* @__PURE__ */ new Map();
@@ -12765,7 +12484,7 @@ var CallbackNonceStore = class {
   }
   async load() {
     try {
-      const raw = JSON.parse(await readFile15(this.path, "utf8"));
+      const raw = JSON.parse(await readFile13(this.path, "utf8"));
       if (!raw || typeof raw !== "object") return;
       this.nonces.clear();
       for (const [nonce, state] of Object.entries(raw)) {
@@ -12841,10 +12560,10 @@ function footerLine(status) {
 }
 
 // src/media/cache.ts
-import { createHash as createHash4 } from "crypto";
+import { createHash as createHash3 } from "crypto";
 import { createReadStream as createReadStream2 } from "fs";
 import { mkdir as mkdir14, readdir as readdir5, rename as rename4, rm as rm12, stat as stat7 } from "fs/promises";
-import { join as join22 } from "path";
+import { join as join20 } from "path";
 
 // src/media/attachment.ts
 var DEFAULT_POLICY = {
@@ -12980,7 +12699,7 @@ var MediaCache = class {
       return null;
     }
     const kind = r.type;
-    const tmpPath = join22(
+    const tmpPath = join20(
       this.rootDir,
       `.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
     );
@@ -12994,7 +12713,7 @@ var MediaCache = class {
     const hash = await hashFile(tmpPath);
     const mime = contentType ?? defaultMime(kind);
     const ext = safeExtensionForMime(mime);
-    const absPath = join22(this.rootDir, `${hash}.${ext}`);
+    const absPath = join20(this.rootDir, `${hash}.${ext}`);
     try {
       await stat7(absPath);
       await rm12(tmpPath, { force: true });
@@ -13036,7 +12755,7 @@ async function listFiles(root) {
   const out = [];
   const entries = await readdir5(root, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
-    const full = join22(root, entry.name);
+    const full = join20(root, entry.name);
     if (entry.isDirectory()) {
       out.push(...await listFiles(full));
     } else if (entry.isFile()) {
@@ -13046,7 +12765,7 @@ async function listFiles(root) {
   return out;
 }
 async function hashFile(path) {
-  const hash = createHash4("sha256");
+  const hash = createHash3("sha256");
   for await (const chunk of createReadStream2(path)) {
     hash.update(chunk);
   }
@@ -13550,9 +13269,9 @@ import { mkdir as mkdir15 } from "fs/promises";
 import { dirname as dirname17 } from "path";
 
 // src/bot/comment-resource.ts
-import { createHash as createHash5 } from "crypto";
+import { createHash as createHash4 } from "crypto";
 function commentTokenDigest(token) {
-  return createHash5("sha256").update(token).digest("hex").slice(0, 16);
+  return createHash4("sha256").update(token).digest("hex").slice(0, 16);
 }
 function commentDocumentScopeId(fileToken) {
   return `comment-doc:${commentTokenDigest(fileToken)}`;
@@ -14923,13 +14642,12 @@ function stringifyArgs(args) {
 }
 async function startChannel(deps) {
   const { cfg, agent, sessions: sessions2, sessionCatalog, workspaces, controls } = deps;
-  const compactStore = deps.compactStore;
   const activeRuns = new ActiveRuns();
   const chatModeCache = new ChatModeCache();
   const pool = new ProcessPool(() => getMaxConcurrentRuns(controls.cfg));
   const executor = new RunExecutor({ agent, pool, activeRuns });
   const appSecret = await resolveAppSecret(cfg, deps.appPaths);
-  const callbackNonceStore = deps.appPaths?.mediaDir ? new CallbackNonceStore(join23(dirname18(deps.appPaths.mediaDir), "callback-nonces.json")) : void 0;
+  const callbackNonceStore = deps.appPaths?.mediaDir ? new CallbackNonceStore(join21(dirname18(deps.appPaths.mediaDir), "callback-nonces.json")) : void 0;
   await callbackNonceStore?.load();
   const callbackAuth = callbackNonceStore ? new CallbackAuth({
     keys: [{ version: 1, secret: appSecret }],
@@ -15031,8 +14749,7 @@ async function startChannel(deps) {
           activePolicyFingerprints,
           lastRunModelByScope,
           scope,
-          mode,
-          compactStore
+          mode
         });
       } catch (err) {
         log.fail("flush", err);
@@ -15060,8 +14777,7 @@ async function startChannel(deps) {
           chatModeCache,
           logThreadModeOverride,
           executor,
-          pool,
-          compactStore
+          pool
         })
       ).catch((err) => log.fail("intake", err));
     },
@@ -15290,8 +15006,7 @@ async function intakeMessage(deps) {
     chatModeCache,
     logThreadModeOverride,
     executor,
-    pool,
-    compactStore
+    pool
   } = deps;
   const preview2 = msg.content.length > 80 ? `${msg.content.slice(0, 80)}\u2026` : msg.content;
   const resolvedMode = await chatModeCache.resolve(channel, msg.chatId);
@@ -15366,7 +15081,6 @@ async function intakeMessage(deps) {
     workspaces,
     agent,
     activeRuns,
-    compactStore,
     sessionCatalog,
     sessionCatalogIdentity: await commandSessionCatalogIdentity({
       msg: emsg,
@@ -15403,8 +15117,7 @@ async function runAgentBatch(deps) {
     activePolicyFingerprints,
     lastRunModelByScope,
     scope,
-    mode,
-    compactStore
+    mode
   } = deps;
   if (batch.length === 0) return;
   const firstMsg = batch[0];
@@ -15480,24 +15193,8 @@ async function runAgentBatch(deps) {
     channel.botIdentity,
     extraInstructions
   );
-  let effectivePrompt = prompt;
-  if (compactStore) {
-    const compacted = await compactStore.summary(scope);
-    if (compacted) {
-      effectivePrompt = `<compacted_context>
-\u4EE5\u4E0B\u662F\u672C\u4F1A\u8BDD\u65E9\u671F\u5BF9\u8BDD\u7684\u538B\u7F29\u6458\u8981\uFF08\u4E0D\u662F\u7528\u6237\u5F53\u524D\u8F93\u5165\uFF09\uFF1A
-${compacted}
-</compacted_context>
-
-${prompt}`;
-      log.info("compact", "injected", { scope, summaryChars: compacted.length });
-    }
-    const recordFileKeys = batch.flatMap((m) => m.resources.map((r) => r.fileKey));
-    const userRecord = batch.map((m) => stripAttachmentRefs(m.content, recordFileKeys).trim()).filter(Boolean).join("\n");
-    if (userRecord) await compactStore.appendUser(scope, userRecord);
-  }
   log.info("prompt", "built", {
-    promptChars: effectivePrompt.length,
+    promptChars: prompt.length,
     quotes: quotes.length,
     topicContext: topicContext.length,
     ...modelSwitched ? { modelSwitchedTo: modelSelection } : {}
@@ -15525,7 +15222,7 @@ ${prompt}`;
   const flow = await startRunFlow({
     scopeId: scope,
     scope: scopeContext,
-    prompt: effectivePrompt,
+    prompt,
     attachments: attachments.map(toPolicyAttachment),
     access: accessDecision,
     capability,
@@ -15659,8 +15356,7 @@ ${prompt}`;
           state: finalAnswerOnlyState(finalState),
           replyMode,
           sendOpts,
-          cardRenderOptions,
-          compactStore
+          cardRenderOptions
         });
         return;
       }
@@ -15732,8 +15428,7 @@ ${prompt}`;
           state: finalReplyState(progress, filterForPrefs(latestState)),
           replyMode,
           sendOpts,
-          cardRenderOptions,
-          compactStore
+          cardRenderOptions
         });
       } else if (progress.opened() && !progress.abandoned()) {
         await sendFinalReply({
@@ -15743,8 +15438,7 @@ ${prompt}`;
           state: finalAnswerOnlyState(filterForPrefs(latestState)),
           replyMode,
           sendOpts,
-          cardRenderOptions,
-          compactStore
+          cardRenderOptions
         });
       }
     } else if (replyMode === "markdown") {
@@ -15826,8 +15520,7 @@ ${prompt}`;
           state: finalReply,
           replyMode,
           sendOpts,
-          cardRenderOptions,
-          compactStore
+          cardRenderOptions
         });
       }
     } else {
@@ -15847,8 +15540,7 @@ ${prompt}`;
         state: controls.profileConfig.agentKind === "codex" ? finalAnswerOnlyState(filterForPrefs(finalState)) : filterForPrefs(finalState),
         replyMode,
         sendOpts,
-        cardRenderOptions,
-        compactStore
+        cardRenderOptions
       });
     }
   } catch (err) {
@@ -15931,9 +15623,6 @@ async function sendFinalReply(input) {
   if (!body.trim()) {
     log.info("outbound", "skip-empty", { scope: input.scope, mode: input.replyMode });
     return;
-  }
-  if (input.compactStore) {
-    await input.compactStore.appendAssistant(input.scope, body).catch((err) => log.warn("compact", "append-assistant-failed", { err: String(err) }));
   }
   if (input.replyMode === "card") {
     const result = await input.channel.send(
@@ -17540,10 +17229,10 @@ async function route(req, res, deps, url) {
 }
 
 // src/runtime/supervisor.ts
-import { join as join25 } from "path";
+import "path";
 
 // src/session/store.ts
-import { readFile as readFile16 } from "fs/promises";
+import { readFile as readFile14 } from "fs/promises";
 var SessionStore = class {
   data = {};
   saving = Promise.resolve();
@@ -17553,7 +17242,7 @@ var SessionStore = class {
   }
   async load() {
     try {
-      const text = await readFile16(this.path, "utf8");
+      const text = await readFile14(this.path, "utf8");
       const raw = JSON.parse(text);
       this.data = {};
       for (const [chatId, entry] of Object.entries(raw)) {
@@ -17653,7 +17342,7 @@ var SessionStore = class {
 
 // src/session/catalog.ts
 import { randomUUID as randomUUID4 } from "crypto";
-import { open as open3, readFile as readFile17, rename as rename5, mkdir as mkdir16 } from "fs/promises";
+import { open as open3, readFile as readFile15, rename as rename5, mkdir as mkdir16 } from "fs/promises";
 import { dirname as dirname19 } from "path";
 var DEFAULT_MAX_ARCHIVED_AGE_MS = 90 * 24 * 60 * 60 * 1e3;
 var DEFAULT_MAX_ENTRIES_PER_SCOPE = 20;
@@ -17676,7 +17365,7 @@ var SessionCatalog = class {
   }
   async load() {
     try {
-      const raw = JSON.parse(await readFile17(this.path, "utf8"));
+      const raw = JSON.parse(await readFile15(this.path, "utf8"));
       if (!Array.isArray(raw)) {
         this.data.clear();
         return;
@@ -17705,6 +17394,22 @@ var SessionCatalog = class {
       return void 0;
     }
     return { ...entry };
+  }
+  /**
+   * Most recently active session id for a scope+agent, without needing the
+   * full cwd/policyFingerprint identity. Used by `/compact` native
+   * passthrough, which only knows the scope and the agent kind.
+   */
+  sessionIdFor(scopeId, agentId) {
+    let best;
+    for (const entry of this.data.values()) {
+      if (entry.scopeId !== scopeId || entry.agentId !== agentId || entry.status !== "active") {
+        continue;
+      }
+      if (!entry.sessionId) continue;
+      if (!best || entry.updatedAt > best.updatedAt) best = entry;
+    }
+    return best?.sessionId;
   }
   upsertActive(input) {
     assertAgentIdentity(input);
@@ -17838,7 +17543,7 @@ function assertAgentIdentity(input) {
 }
 
 // src/workspace/store.ts
-import { readFile as readFile18 } from "fs/promises";
+import { readFile as readFile16 } from "fs/promises";
 var WorkspaceStore = class {
   data = { chats: {}, named: {} };
   saving = Promise.resolve();
@@ -17848,7 +17553,7 @@ var WorkspaceStore = class {
   }
   async load() {
     try {
-      const text = await readFile18(this.path, "utf8");
+      const text = await readFile16(this.path, "utf8");
       const parsed = JSON.parse(text);
       this.data = {
         chats: parsed.chats ?? {},
@@ -18619,7 +18324,7 @@ function isWindowsCommandNotFoundLine4(line) {
 
 // src/agent/hermes/acp-client.ts
 import { createInterface as createInterface9 } from "readline";
-import { spawn } from "child_process";
+import { spawn as spawn2 } from "child_process";
 var AcpConnection = class {
   child;
   rl;
@@ -18628,7 +18333,7 @@ var AcpConnection = class {
   updateHandlers = /* @__PURE__ */ new Set();
   closed = false;
   constructor(binary, args) {
-    this.child = spawn(binary, args, {
+    this.child = spawn2(binary, args, {
       stdio: ["pipe", "pipe", "pipe"]
     });
     this.rl = createInterface9({ input: this.child.stdout, crlfDelay: Infinity });
@@ -19011,10 +18716,10 @@ function translateUpdate(update) {
 }
 
 // src/agent/openclaw/adapter.ts
-import { spawn as spawn2 } from "child_process";
+import { spawn as spawn3 } from "child_process";
 import { mkdtempSync as mkdtempSync2, writeFileSync as writeFileSync3, rmSync as rmSync2 } from "fs";
 import { tmpdir as tmpdir3 } from "os";
-import { join as join24 } from "path";
+import { join as join22 } from "path";
 
 // src/agent/openclaw/argv.ts
 function buildOpenClawArgs(input) {
@@ -19060,8 +18765,8 @@ var OpenClawAdapter = class {
     if (!opts.cwd) {
       throw new Error("cwd is required for OpenClawAdapter.run");
     }
-    const tmpDir = mkdtempSync2(join24(tmpdir3(), "openclaw-bridge-"));
-    const msgFile = join24(tmpDir, "prompt.txt");
+    const tmpDir = mkdtempSync2(join22(tmpdir3(), "openclaw-bridge-"));
+    const msgFile = join22(tmpDir, "prompt.txt");
     writeFileSync3(msgFile, opts.prompt, "utf8");
     const args = buildOpenClawArgs({
       agentId: this.agentId,
@@ -19079,7 +18784,7 @@ var OpenClawAdapter = class {
       promptChars: opts.prompt.length,
       model: opts.model
     });
-    const child = spawn2(this.binary, args, {
+    const child = spawn3(this.binary, args, {
       cwd: opts.cwd,
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -19330,7 +19035,7 @@ async function releaseRuntimeLocks(locks) {
 
 // src/runtime/supervisor.ts
 var ManagedProfile = class {
-  constructor(profile2, appPaths2, configPath, cfg, profileConfig, agent, sessions2, sessionCatalog, workspaces, compactStore, startChannelFn, onExitCommand) {
+  constructor(profile2, appPaths2, configPath, cfg, profileConfig, agent, sessions2, sessionCatalog, workspaces, startChannelFn, onExitCommand) {
     this.profile = profile2;
     this.appPaths = appPaths2;
     this.configPath = configPath;
@@ -19340,7 +19045,6 @@ var ManagedProfile = class {
     this.sessions = sessions2;
     this.sessionCatalog = sessionCatalog;
     this.workspaces = workspaces;
-    this.compactStore = compactStore;
     this.startChannelFn = startChannelFn;
     this.onExitCommand = onExitCommand;
   }
@@ -19353,7 +19057,6 @@ var ManagedProfile = class {
   sessions;
   sessionCatalog;
   workspaces;
-  compactStore;
   startChannelFn;
   onExitCommand;
   bridge;
@@ -19392,7 +19095,6 @@ var ManagedProfile = class {
         sessions: this.sessions,
         sessionCatalog: this.sessionCatalog,
         workspaces: this.workspaces,
-        compactStore: this.compactStore,
         controls: this.controls,
         appPaths: this.appPaths
       });
@@ -19495,7 +19197,6 @@ var ManagedProfile = class {
         sessions: this.sessions,
         sessionCatalog: this.sessionCatalog,
         workspaces: this.workspaces,
-        compactStore: this.compactStore,
         controls: nextControls,
         appPaths: nextRuntime.appPaths
       });
@@ -19592,7 +19293,6 @@ var Supervisor = class {
     await sessionCatalog.load();
     const workspaces = new WorkspaceStore(appPaths2.workspacesFile);
     await workspaces.load();
-    const compactStore = new CompactStore(join25(appPaths2.profileDir, "compact"));
     const managed = new ManagedProfile(
       appPaths2.profile,
       appPaths2,
@@ -19603,7 +19303,6 @@ var Supervisor = class {
       sessions2,
       sessionCatalog,
       workspaces,
-      compactStore,
       this.startChannelFn,
       (p3) => void this.stopProfile(p3).catch(() => void 0)
     );

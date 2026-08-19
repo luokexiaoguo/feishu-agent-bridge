@@ -43,12 +43,9 @@ import type {
   ProfileConfig,
   ProfileMode,
 } from '../config/profile-schema';
-import { CompactStore } from '../session/compact';
 import {
-  resolveCompactApiKey,
-  summarizeConversation,
-  summarizeViaAgent,
-  summarizeViaClaudeNative,
+  compactOpenClawSession,
+  runNativeCompact,
 } from '../session/compact-llm';
 import { effectiveLarkCliIdentity } from '../config/profile-schema';
 import { resolveAppPaths } from '../config/app-paths';
@@ -150,8 +147,6 @@ export interface CommandContext {
     options: ListCodexThreadHistoryOptions,
   ) => Promise<CodexThreadHistoryEntry[]>;
   claudeHistoryProvider?: (cwd: string, limit: number) => Promise<SessionSummary[]>;
-  /** Per-scope conversation history used by `/compact`. */
-  compactStore?: CompactStore;
   /** Set when invoked from a CardKit 2.0 form submit. Keys are input `name`s. */
   formValue?: Record<string, unknown>;
   /** True when this invocation came from a card button click rather than a
@@ -355,9 +350,6 @@ async function handleNew(args: string, ctx: CommandContext): Promise<void> {
     });
   }
   ctx.sessions.clear(ctx.scope);
-  await ctx.compactStore?.reset(ctx.scope).catch((err: unknown) =>
-    log.warn('compact', 'reset-failed', { err: String(err) }),
-  );
   await reply(ctx, wasRunning ? '已中断当前任务并开始新会话。' : '已开始新会话。');
 }
 
@@ -372,167 +364,118 @@ async function handleNew(args: string, ctx: CommandContext): Promise<void> {
  */
 async function handleCompact(args: string, ctx: CommandContext): Promise<void> {
   const cfg = ctx.controls.profileConfig.compaction;
-  const store = ctx.compactStore;
-  if (!store) {
-    await reply(ctx, '❌ 当前运行环境未启用上下文压缩（缺少 compact store）。');
-    return;
-  }
   if (!cfg.enabled) {
     await reply(ctx, '❌ 上下文压缩已停用（配置 compaction.enabled=false）。');
     return;
   }
 
-  // Parse optional argument. For claude the argument is a /compact focus
-  // instruction (e.g. "focus on the auth fix"); for other agents it is the
-  // number of rounds to keep (e.g. 10). Both handled below.
+  // /compact 是纯透传：桥只做飞书 ↔ CLI 的媒介，压缩由 agent 自己的
+  // 命令完成。各 agent 的原生压缩指令（均已实测）：
+  //   claude:   claude -p --resume <session> "/compact [焦点]"
+  //   mimo:     mimo run --session <id> "/compact"
+  //   openclaw: openclaw sessions compact <key>
+  // opencode/codex/hermes 的 headless CLI 没有压缩命令，无法透传。
   const argTrimmed = args.trim();
+  const cwd = effectiveWorkspaceCwd(ctx);
+  const timeoutMs = 60_000;
 
-  // Claude 原生透传：claude 的 headless CLI 直接支持 `/compact` 命令
-  // （claude -p --resume <session> "/compact"），压缩是 Claude Code 官方
-  // 语义（compact_boundary、保留重要上下文），比桥的摘要更专业，且完全
-  // 等效于在终端里执行压缩。有可续接的 claude 会话就走这条，不再用桥模拟。
   if (ctx.agent.id === 'claude') {
     const sessionId = ctx.sessions.getRaw(ctx.scope)?.sessionId;
-    if (sessionId) {
-      const focus = argTrimmed || undefined;
-      log.info('compact', 'native-claude', { scope: ctx.scope, focus: focus ?? '' });
-      try {
-        await summarizeViaClaudeNative({
-          adapter: ctx.agent,
-          sessionId,
-          cwd: effectiveWorkspaceCwd(ctx),
-          focus,
-          timeoutMs: cfg.llm.timeoutMs,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        log.warn('compact', 'native-claude-failed', { scope: ctx.scope, err: msg });
-        await reply(ctx, `❌ Claude 原生压缩失败：${msg}\n\n（会话未改动，可重试）`);
-        return;
-      }
-      // 原生压缩后，桥记录的对话历史对 claude 已无意义（claude 会话本身
-      // 已被官方压缩），清空避免下次走桥摘要产生双份摘要。
-      await store.reset(ctx.scope).catch((err: unknown) =>
-        log.warn('compact', 'reset-after-native-failed', { err: String(err) }),
-      );
-      await reply(
-        ctx,
-        `✅ 已用 **Claude 原生 /compact** 压缩当前会话（等效于在终端执行 \`claude -p --resume "/compact"\`）。\n\n` +
-          '之后的消息会带着压缩后的上下文继续。' +
-          (focus ? `\n焦点指令：\`${focus}\`` : '') +
-          '\n\n> 💡 其他 agent（mimo/opencode 等）没有原生压缩命令，走桥的摘要方案。',
-      );
+    if (!sessionId) {
+      await reply(ctx, '当前 claude 会话还没有可压缩的对话，先聊几轮再发 `/compact`。');
       return;
     }
-    // 无 claude 会话（还没聊过）→ 降级到桥摘要流程（下面）。
-  }
-
-  // Parse optional "keep N rounds" argument: /compact 10 keeps the newest 10
-  // user turns and folds everything older. Default = compaction.keepRounds.
-  let keepRounds = cfg.keepRounds;
-  if (argTrimmed) {
-    const parsed = Number(argTrimmed);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      await reply(ctx, '❌ 用法：`/compact [N]`，N = 保留的最近对话轮数（非负整数）。');
-      return;
-    }
-    keepRounds = Math.floor(parsed);
-  }
-
-  const entries = await store.entries(ctx.scope);
-  if (entries.length === 0) {
-    await reply(ctx, '当前会话还没有可压缩的对话记录（发送过消息后才会开始记录）。');
-    return;
-  }
-
-  // 定位保留起点：从后往前数第 keepRounds 条 user 消息（1 轮 = 1 条 user
-  // 消息及其后续 assistant 回复）。keepRounds=0 表示全部压缩。
-  const userIndexes = entries
-    .map((entry, index) => (entry.role === 'user' ? index : -1))
-    .filter((index) => index >= 0);
-  const keepFrom = keepRounds <= 0 ? entries.length : (userIndexes[userIndexes.length - keepRounds] ?? 0);
-  const removed = entries.slice(0, keepFrom);
-  const removedRounds = removed.filter((entry) => entry.role === 'user').length;
-  if (removedRounds === 0) {
-    const kept = entries.filter((entry) => entry.role === 'user').length;
-    await reply(ctx, `当前会话只有最近 ${kept} 轮对话，无需压缩（保留阈值 ${keepRounds} 轮）。`);
-    return;
-  }
-
-  const oldSummary = await store.summary(ctx.scope);
-  const transcript = removed
-    .map((entry) => `${entry.role === 'user' ? '用户' : '助手'}：${entry.text}`)
-    .join('\n\n');
-
-  const apiKey = await resolveCompactApiKey(cfg.llm.apiKey);
-  const compactCwd = effectiveWorkspaceCwd(ctx);
-
-  log.info('compact', 'start', {
-    scope: ctx.scope,
-    removedRounds,
-    removedChars: removed.reduce((total, entry) => total + entry.text.length, 0),
-    keepRounds,
-    model: apiKey ? cfg.llm.model : `agent:${ctx.agent.id}`,
-  });
-
-  let summary: string;
-  let usedAgent = false;
-  try {
-    if (apiKey) {
-      // 首选：专用摘要 LLM（快、省）
-      summary = await summarizeConversation({
-        baseUrl: cfg.llm.baseUrl,
-        model: cfg.llm.model,
-        apiKey,
-        oldSummary,
-        transcript,
-        timeoutMs: cfg.llm.timeoutMs,
-      });
-    } else if (ctx.agent) {
-      // 兜底：复用当前 agent 本体做摘要——新电脑只要 agent 配好模型就能
-      // 零配置直接 /compact。
-      usedAgent = true;
-      summary = await summarizeViaAgent({
+    const focus = argTrimmed || undefined;
+    log.info('compact', 'native-claude', { scope: ctx.scope, focus: focus ?? '' });
+    try {
+      await runNativeCompact({
         adapter: ctx.agent,
-        cwd: compactCwd,
-        oldSummary,
-        transcript,
-        timeoutMs: cfg.llm.timeoutMs,
+        sessionId,
+        command: focus ? `/compact ${focus}` : '/compact',
+        cwd,
+        timeoutMs,
       });
-    } else {
-      await reply(
-        ctx,
-        '❌ 找不到可用的摘要途径：既没有配置摘要模型 API key，当前也没有可用 agent。\n\n' +
-          '请配置 `compaction.llm.apiKey`（OpenAI 兼容端点）后重试。',
-      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn('compact', 'native-claude-failed', { scope: ctx.scope, err: msg });
+      await reply(ctx, `❌ Claude 原生压缩失败：${msg}\n\n（会话未改动，可重试）`);
       return;
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log.warn('compact', 'llm-failed', { scope: ctx.scope, err: msg });
-    await reply(ctx, `❌ 压缩失败：${msg}\n\n（会话记录未改动，可重试）`);
+    await reply(
+      ctx,
+      `✅ 已用 **Claude 原生 /compact** 压缩当前会话（等效终端执行 \`claude -p --resume "/compact"\`）。\n\n` +
+        '之后的消息会带着压缩后的上下文继续。' +
+        (focus ? `\n焦点指令：\`${focus}\`` : ''),
+    );
     return;
   }
 
-  const result = await store.applyCompaction(ctx.scope, keepFrom, summary);
-  log.info('compact', 'done', {
-    scope: ctx.scope,
-    removedRounds: result.removedRounds,
-    keptRounds: result.keptRounds,
-    summaryChars: result.summaryChars,
-  });
+  if (ctx.agent.id === 'mimo') {
+    const sessionId = ctx.sessionCatalog?.sessionIdFor(ctx.scope, 'mimo');
+    if (!sessionId) {
+      await reply(ctx, '当前 mimo 会话还没有可压缩的对话，先聊几轮再发 `/compact`。');
+      return;
+    }
+    log.info('compact', 'native-mimo', { scope: ctx.scope });
+    try {
+      await runNativeCompact({
+        adapter: ctx.agent,
+        sessionId,
+        command: '/compact',
+        cwd,
+        timeoutMs,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn('compact', 'native-mimo-failed', { scope: ctx.scope, err: msg });
+      await reply(ctx, `❌ mimo 原生压缩失败：${msg}\n\n（会话未改动，可重试）`);
+      return;
+    }
+    await reply(
+      ctx,
+      '✅ 已用 **mimo 原生 /compact** 压缩当前会话（等效终端执行 `mimo run --session <id> "/compact"`）。\n\n' +
+        '之后的消息会带着压缩后的上下文继续。',
+    );
+    return;
+  }
 
-  const preview =
-    summary.length > 400 ? `${summary.slice(0, 400)}…` : summary;
-  const usedNote = usedAgent
-    ? `\n\n> ⚙️ 未配置摘要模型 key，本次自动用当前 agent「${ctx.agent.displayName}」压缩（零配置，稍慢）。\n> 想更快可配 \`compaction.llm\`（OpenAI 兼容端点）。`
-    : '';
+  if (ctx.agent.id === 'openclaw') {
+    const oc = ctx.controls.profileConfig.openclaw;
+    const sessionId = ctx.sessionCatalog?.sessionIdFor(ctx.scope, 'openclaw');
+    if (!oc?.binaryPath) {
+      await reply(ctx, '❌ 缺少 openclaw 配置（openclaw.binaryPath）。');
+      return;
+    }
+    if (!sessionId) {
+      await reply(ctx, '当前 openclaw 会话还没有可压缩的对话，先聊几轮再发 `/compact`。');
+      return;
+    }
+    log.info('compact', 'native-openclaw', { scope: ctx.scope });
+    try {
+      await compactOpenClawSession({
+        binary: oc.binaryPath,
+        agentId: oc.agentId,
+        sessionId,
+        timeoutMs,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn('compact', 'native-openclaw-failed', { scope: ctx.scope, err: msg });
+      await reply(ctx, `❌ openclaw 原生压缩失败：${msg}\n\n（会话未改动，可重试）`);
+      return;
+    }
+    await reply(
+      ctx,
+      '✅ 已用 **openclaw sessions compact** 压缩当前会话（等效终端执行 `openclaw sessions compact <key>`）。\n\n' +
+        '之后的消息会带着压缩后的上下文继续。',
+    );
+    return;
+  }
+
   await reply(
     ctx,
-    `✅ 已压缩 **${result.removedRounds}** 轮对话（保留最近 ${result.keptRounds} 轮）\n\n` +
-      `📋 早期对话摘要：\n${preview}\n\n` +
-      '之后的对话，agent 会自动携带这份摘要继续，上下文不再无限膨胀。\n' +
-      `如需调整保留轮数：\`/compact 10\`（保留最近 10 轮）。${usedNote}`,
+    `❌ ${ctx.agent.displayName} 的 headless CLI 没有压缩命令（实测 \`/compact\` 会被当普通消息发给模型），无法透传压缩。\n\n` +
+      '当前支持原生压缩的 agent：claude / mimo / openclaw。',
   );
 }
 

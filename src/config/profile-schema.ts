@@ -12,11 +12,6 @@ import {
   type PermissionConfig,
   type PermissionSource,
 } from './permissions';
-import {
-  DEFAULT_COMPACT_BASE_URL,
-  DEFAULT_COMPACT_MODEL,
-  DEFAULT_COMPACT_TIMEOUT_MS,
-} from '../session/compact-llm';
 
 export type AgentKind = 'claude' | 'codex' | 'mimo' | 'opencode' | 'hermes' | 'openclaw';
 export type SandboxMode = CodexSandboxMode;
@@ -120,34 +115,23 @@ export interface AttachmentConfig {
 }
 
 /**
- * `/compact` context-compression settings. The bridge records per-scope
- * conversation history and, on `/compact [N]`, folds the older portion into
- * an LLM summary that is injected at the top of every future prompt.
+ * `/compact` settings. The command is a pure passthrough: it dispatches the
+ * agent CLI's own compaction command (claude/mimo `/compact`, openclaw
+ * `sessions compact`) and reports the result. `enabled` is the master
+ * switch. Legacy `keepRounds`/`llm` fields from the summarizer design are
+ * accepted for config compatibility and ignored.
  */
 export interface CompactionConfig {
   /** Master switch. Default true. */
   enabled: boolean;
-  /** Rounds to keep when the user runs `/compact` without an argument. */
-  keepRounds: number;
-  /** OpenAI-compatible endpoint used to produce the summary. */
-  llm: {
-    baseUrl: string;
-    model: string;
-    /** Optional explicit key. Defaults to LOCAL_DEEPSEEK_API_KEY from the
-     * environment or `~/.hermes/.env` (玄策's local new-api key). */
-    apiKey?: string;
-    timeoutMs?: number;
-  };
+  /** @deprecated summarizer design removed — ignored. */
+  keepRounds?: number;
+  /** @deprecated summarizer design removed — ignored. */
+  llm?: { baseUrl?: string; model?: string; apiKey?: string; timeoutMs?: number };
 }
 
 export const COMPACTION_DEFAULTS: CompactionConfig = {
   enabled: true,
-  keepRounds: 20,
-  llm: {
-    baseUrl: DEFAULT_COMPACT_BASE_URL,
-    model: DEFAULT_COMPACT_MODEL,
-    timeoutMs: DEFAULT_COMPACT_TIMEOUT_MS,
-  },
 };
 
 export type CommentConfig = Record<string, never>;
@@ -577,30 +561,10 @@ function normalizeComments(_input: unknown): CommentConfig {
 
 function normalizeCompaction(input: Partial<CompactionConfig> | undefined): CompactionConfig {
   const raw = input && typeof input === 'object' ? input : {};
-  const keepRounds =
-    typeof raw.keepRounds === 'number' && Number.isFinite(raw.keepRounds)
-      ? Math.max(0, Math.floor(raw.keepRounds))
-      : COMPACTION_DEFAULTS.keepRounds;
-  const llm = raw.llm && typeof raw.llm === 'object' ? raw.llm : ({} as CompactionConfig['llm']);
+  // Legacy keepRounds/llm are accepted for config compatibility but ignored —
+  // /compact is a native passthrough now and needs no summarizer config.
   return {
     enabled: raw.enabled !== false,
-    keepRounds,
-    llm: {
-      baseUrl:
-        typeof llm.baseUrl === 'string' && llm.baseUrl.trim()
-          ? llm.baseUrl.trim()
-          : COMPACTION_DEFAULTS.llm.baseUrl,
-      model:
-        typeof llm.model === 'string' && llm.model.trim()
-          ? llm.model.trim()
-          : COMPACTION_DEFAULTS.llm.model,
-      ...(typeof llm.apiKey === 'string' && llm.apiKey.trim()
-        ? { apiKey: llm.apiKey.trim() }
-        : {}),
-      ...(typeof llm.timeoutMs === 'number' && Number.isFinite(llm.timeoutMs) && llm.timeoutMs > 0
-        ? { timeoutMs: llm.timeoutMs }
-        : {}),
-    },
   };
 }
 

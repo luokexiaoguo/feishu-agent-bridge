@@ -8,7 +8,6 @@ import type { AgentKind, ProfileConfig } from '../config/profile-schema';
 import type { AgentAdapter } from '../agent/types';
 import { log } from '../core/logger';
 import { refreshOwnerControls } from '../policy/owner';
-import { CompactStore } from '../session/compact';
 import { SessionStore } from '../session/store';
 import { SessionCatalog } from '../session/catalog';
 import { WorkspaceStore } from '../workspace/store';
@@ -79,7 +78,6 @@ class ManagedProfile {
     private sessions: SessionStore,
     private sessionCatalog: SessionCatalog,
     private workspaces: WorkspaceStore,
-    private compactStore: CompactStore,
     private startChannelFn: StartChannelFn,
     private onExitCommand: (profile: string) => void,
   ) {}
@@ -120,7 +118,6 @@ class ManagedProfile {
         sessions: this.sessions,
         sessionCatalog: this.sessionCatalog,
         workspaces: this.workspaces,
-        compactStore: this.compactStore,
         controls: this.controls,
         appPaths: this.appPaths,
       });
@@ -235,7 +232,6 @@ class ManagedProfile {
         sessions: this.sessions,
         sessionCatalog: this.sessionCatalog,
         workspaces: this.workspaces,
-        compactStore: this.compactStore,
         controls: nextControls,
         appPaths: nextRuntime.appPaths,
       });
@@ -348,7 +344,6 @@ export class Supervisor {
     await sessionCatalog.load();
     const workspaces = new WorkspaceStore(appPaths.workspacesFile);
     await workspaces.load();
-    const compactStore = new CompactStore(join(appPaths.profileDir, 'compact'));
 
     const managed = new ManagedProfile(
       appPaths.profile,
@@ -360,7 +355,6 @@ export class Supervisor {
       sessions,
       sessionCatalog,
       workspaces,
-      compactStore,
       this.startChannelFn,
       (p) => void this.stopProfile(p).catch(() => undefined),
     );

@@ -23,24 +23,6 @@ export const BRIDGE_SYSTEM_PROMPT = `# feishu-agent-bridge 运行约定
 
 多条消息在短时间内合并送达时，\`user_input\` 里每段会带 \`[名字 (user|bot)]:\` 行首标注以区分发送者——这是 bridge 注入的展示格式，**你回复时不要模仿这种标注**。这些都是 bridge 注入的元数据，**不要照抄、不要在你的回复里渲染**——它对用户不可见。
 
-## compacted_context
-
-如果本会话早期对话被压缩过，每条 user message 顶部会带一个 \`<compacted_context>\` 块：
-
-\`\`\`
-<compacted_context>
-以下是本会话早期对话的压缩摘要（不是用户当前输入）：
-（一段 Markdown 无序列表，浓缩了早期对话的要点）
-</compacted_context>
-\`\`\`
-
-它是 bridge 注入的**早期对话浓缩**，帮助你延续上下文，规则：
-
-- 把它当作本会话更早之前发生过的对话背景，回答时自然衔接
-- **它不是用户当前输入**：用户真正的问题/消息在它之后
-- 摘要里若提到未完成的任务或待办，视为仍需继续推进的事项
-- 不要照抄摘要内容到回复里，也不要向用户复述"这是摘要"
-
 ## 与其他 bot 协作（bot-at-bot）
 
 - 自我识别：\`bridge_context.botOpenId\` 是你自己的 open_id；消息内容或 mentions 里出现这个 id 就是指你自己。

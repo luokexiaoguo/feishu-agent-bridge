@@ -99,6 +99,23 @@ export class SessionCatalog {
     return { ...entry };
   }
 
+  /**
+   * Most recently active session id for a scope+agent, without needing the
+   * full cwd/policyFingerprint identity. Used by `/compact` native
+   * passthrough, which only knows the scope and the agent kind.
+   */
+  sessionIdFor(scopeId: string, agentId: AgentCapabilityId): string | undefined {
+    let best: SessionCatalogEntry | undefined;
+    for (const entry of this.data.values()) {
+      if (entry.scopeId !== scopeId || entry.agentId !== agentId || entry.status !== 'active') {
+        continue;
+      }
+      if (!entry.sessionId) continue;
+      if (!best || entry.updatedAt > best.updatedAt) best = entry;
+    }
+    return best?.sessionId;
+  }
+
   upsertActive(input: UpsertSessionCatalogInput): SessionCatalogEntry {
     assertAgentIdentity(input);
     const key = sessionCatalogKey(input);
