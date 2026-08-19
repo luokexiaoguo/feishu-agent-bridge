@@ -10,6 +10,14 @@
 - **升级动作（老机器）**：旧 unit（`lark-channel-bridge.bot.*.service`）需先 stop + disable，再用 `feishu-agent-bridge start --profile <name>` 重建新 unit（自动 enable）。配置 / 会话 / secrets 全部在 `~/.lark-channel/`，不受影响。
 - 其余 `lark-channel-bridge` 字符串引用为**历史迁移路径 / 数据标识**（旧版 `~/.config/lark-channel-bridge` 数据迁移、`source: 'lark-channel-bridge'` 记录），保留不动以兼容旧数据。
 
+## /compact 零配置兜底：复用当前 agent 做摘要（2026-08-20）
+
+- 新增 `summarizeViaAgent`（`src/session/compact-llm.ts`）：没有专用摘要 LLM key 时，自动用当前 profile 的 agent（如 Claude Code）跑一次纯摘要任务（`adapter.run` + 纯摘要 prompt，不续会话、不注入 bridge 上下文），收集最终文本作为摘要。
+- 摘要源优先级：`compaction.llm` 配置 / `LOCAL_DEEPSEEK_API_KEY` / `~/.hermes/.env` → **当前 agent 本体** → 都没有才提示配置。
+- 超时保护：`Promise.race` 兜底，agent 挂起时 `stop()` 并在 `timeoutMs` 内报错返回，不会卡死 `/compact`。
+- 收益：新电脑只要 agent 模型配好（能跑任务），`/compact` 就**零配置开箱即用**，无需任何额外 LLM key。
+- 验证：真实 claude CLI 冒烟通过（5.8s 出摘要）；单测 490 全绿。
+
 ## 新功能：/compact 上下文压缩（2026-08-19，全 agent 统一）
 
 - **背景**：各 agent CLI（claude/codex/mimo/hermes/openclaw/opencode）的 headless 模式都没有统一的手动压缩入口（claude 的 `--autocompact` 仅自动、TUI 的 `/compact` 在 headless 下不可用）。桥此前不持有对话历史，无法提供压缩。

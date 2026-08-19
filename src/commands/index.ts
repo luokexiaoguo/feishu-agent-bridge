@@ -47,6 +47,7 @@ import { CompactStore } from '../session/compact';
 import {
   resolveCompactApiKey,
   summarizeConversation,
+  summarizeViaAgent,
 } from '../session/compact-llm';
 import { effectiveLarkCliIdentity } from '../config/profile-schema';
 import { resolveAppPaths } from '../config/app-paths';
@@ -419,32 +420,48 @@ async function handleCompact(args: string, ctx: CommandContext): Promise<void> {
     .join('\n\n');
 
   const apiKey = await resolveCompactApiKey(cfg.llm.apiKey);
-  if (!apiKey) {
-    await reply(
-      ctx,
-      '❌ 找不到摘要模型的 API key。\n\n请配置 `compaction.llm.apiKey`，或确保 `~/.hermes/.env` 里有 `LOCAL_DEEPSEEK_API_KEY`。',
-    );
-    return;
-  }
+  const compactCwd = effectiveWorkspaceCwd(ctx);
 
   log.info('compact', 'start', {
     scope: ctx.scope,
     removedRounds,
     removedChars: removed.reduce((total, entry) => total + entry.text.length, 0),
     keepRounds,
-    model: cfg.llm.model,
+    model: apiKey ? cfg.llm.model : `agent:${ctx.agent.id}`,
   });
 
   let summary: string;
+  let usedAgent = false;
   try {
-    summary = await summarizeConversation({
-      baseUrl: cfg.llm.baseUrl,
-      model: cfg.llm.model,
-      apiKey,
-      oldSummary,
-      transcript,
-      timeoutMs: cfg.llm.timeoutMs,
-    });
+    if (apiKey) {
+      // 首选：专用摘要 LLM（快、省）
+      summary = await summarizeConversation({
+        baseUrl: cfg.llm.baseUrl,
+        model: cfg.llm.model,
+        apiKey,
+        oldSummary,
+        transcript,
+        timeoutMs: cfg.llm.timeoutMs,
+      });
+    } else if (ctx.agent) {
+      // 兜底：复用当前 agent 本体做摘要——新电脑只要 agent 配好模型就能
+      // 零配置直接 /compact。
+      usedAgent = true;
+      summary = await summarizeViaAgent({
+        adapter: ctx.agent,
+        cwd: compactCwd,
+        oldSummary,
+        transcript,
+        timeoutMs: cfg.llm.timeoutMs,
+      });
+    } else {
+      await reply(
+        ctx,
+        '❌ 找不到可用的摘要途径：既没有配置摘要模型 API key，当前也没有可用 agent。\n\n' +
+          '请配置 `compaction.llm.apiKey`（OpenAI 兼容端点）后重试。',
+      );
+      return;
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.warn('compact', 'llm-failed', { scope: ctx.scope, err: msg });
@@ -462,12 +479,15 @@ async function handleCompact(args: string, ctx: CommandContext): Promise<void> {
 
   const preview =
     summary.length > 400 ? `${summary.slice(0, 400)}…` : summary;
+  const usedNote = usedAgent
+    ? `\n\n> ⚙️ 未配置摘要模型 key，本次自动用当前 agent「${ctx.agent.displayName}」压缩（零配置，稍慢）。\n> 想更快可配 \`compaction.llm\`（OpenAI 兼容端点）。`
+    : '';
   await reply(
     ctx,
     `✅ 已压缩 **${result.removedRounds}** 轮对话（保留最近 ${result.keptRounds} 轮）\n\n` +
       `📋 早期对话摘要：\n${preview}\n\n` +
       '之后的对话，agent 会自动携带这份摘要继续，上下文不再无限膨胀。\n' +
-      '如需调整保留轮数：`/compact 10`（保留最近 10 轮）。',
+      `如需调整保留轮数：\`/compact 10\`（保留最近 10 轮）。${usedNote}`,
   );
 }
 

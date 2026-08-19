@@ -125,3 +125,94 @@ export async function summarizeConversation(
   }
   return content.trim();
 }
+
+/**
+ * Build the summarizer prompt handed to an agent CLI when no dedicated
+ * summary LLM key is configured. Kept in sync with {@link SYSTEM_PROMPT}.
+ */
+export function buildAgentSummaryPrompt(input: {
+  oldSummary?: string;
+  transcript: string;
+}): string {
+  const { oldSummary, transcript } = input;
+  const parts = [
+    '你是会话压缩器。把下面这段对话历史压缩成一份「早期对话摘要」。规则：',
+    '- 用中文输出，Markdown 无序列表，每个要点一行，总长度不超过 600 字',
+    '- 必须保留：用户的明确偏好/决定/要求、已完成事项与结论、未完成或待办事项、关键文件名/路径/数字/配置/账号信息',
+    '- 可以丢弃：问候寒暄、重复表达、工具调用细节、纯情绪化内容',
+    '- 不要编造对话里没有出现过的信息',
+    '- 输出只有摘要本体，不要任何前后缀、标题或说明',
+    '',
+  ];
+  if (oldSummary && oldSummary.trim()) {
+    parts.push(`【已有的早期对话摘要】\n${oldSummary.trim()}`, '---');
+  }
+  parts.push(`【本次待压缩的对话记录】\n${transcript}`);
+  return parts.join('\n');
+}
+
+export interface SummarizeViaAgentInput {
+  adapter: import('../agent/types').AgentAdapter;
+  cwd?: string;
+  oldSummary?: string;
+  transcript: string;
+  timeoutMs?: number;
+}
+
+/**
+ * Fallback summarizer: reuse the profile's own agent CLI (e.g. claude) to
+ * produce the summary. This is what makes `/compact` work out-of-the-box on
+ * machines that have a configured agent but no dedicated LLM API key.
+ *
+ * Spawns the agent with a pure summarization prompt (no session resume, no
+ * bridge context) and collects its final text. Throws on agent errors or
+ * timeout.
+ */
+export async function summarizeViaAgent(
+  input: SummarizeViaAgentInput,
+): Promise<string> {
+  const { adapter, cwd, oldSummary, transcript, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
+  const run = adapter.run({
+    runId: `compact-${Math.random().toString(36).slice(2, 10)}`,
+    prompt: buildAgentSummaryPrompt({ oldSummary, transcript }),
+    ...(cwd ? { cwd } : {}),
+    permissionMode: 'bypassPermissions',
+    stopGraceMs: 5000,
+  });
+
+  let text = '';
+  let error: string | undefined;
+  const finished = (async () => {
+    for await (const evt of run.events) {
+      if (evt.type === 'text') text += evt.delta;
+      else if (evt.type === 'final_text') text = evt.content;
+      else if (evt.type === 'error') {
+        error = evt.message;
+        break;
+      }
+    }
+  })();
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      // Agent 挂起时停止它，并立即以超时失败返回——即使事件流不结束，
+      // Promise.race 也能让 /compact 及时报错而不是卡死。
+      void run.stop().catch(() => undefined);
+      reject(new Error(`用 ${adapter.displayName} 做摘要超时（${timeoutMs}ms）`));
+    }, timeoutMs);
+  });
+
+  try {
+    await Promise.race([finished, timedOut]);
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+
+  if (error) throw new Error(`用 ${adapter.displayName} 做摘要失败：${error}`);
+  const summary = text.trim();
+  if (!summary) throw new Error(`用 ${adapter.displayName} 做摘要返回了空内容`);
+  return summary;
+}

@@ -653,6 +653,65 @@ ${transcript}`
   }
   return content.trim();
 }
+function buildAgentSummaryPrompt(input) {
+  const { oldSummary, transcript } = input;
+  const parts = [
+    "\u4F60\u662F\u4F1A\u8BDD\u538B\u7F29\u5668\u3002\u628A\u4E0B\u9762\u8FD9\u6BB5\u5BF9\u8BDD\u5386\u53F2\u538B\u7F29\u6210\u4E00\u4EFD\u300C\u65E9\u671F\u5BF9\u8BDD\u6458\u8981\u300D\u3002\u89C4\u5219\uFF1A",
+    "- \u7528\u4E2D\u6587\u8F93\u51FA\uFF0CMarkdown \u65E0\u5E8F\u5217\u8868\uFF0C\u6BCF\u4E2A\u8981\u70B9\u4E00\u884C\uFF0C\u603B\u957F\u5EA6\u4E0D\u8D85\u8FC7 600 \u5B57",
+    "- \u5FC5\u987B\u4FDD\u7559\uFF1A\u7528\u6237\u7684\u660E\u786E\u504F\u597D/\u51B3\u5B9A/\u8981\u6C42\u3001\u5DF2\u5B8C\u6210\u4E8B\u9879\u4E0E\u7ED3\u8BBA\u3001\u672A\u5B8C\u6210\u6216\u5F85\u529E\u4E8B\u9879\u3001\u5173\u952E\u6587\u4EF6\u540D/\u8DEF\u5F84/\u6570\u5B57/\u914D\u7F6E/\u8D26\u53F7\u4FE1\u606F",
+    "- \u53EF\u4EE5\u4E22\u5F03\uFF1A\u95EE\u5019\u5BD2\u6684\u3001\u91CD\u590D\u8868\u8FBE\u3001\u5DE5\u5177\u8C03\u7528\u7EC6\u8282\u3001\u7EAF\u60C5\u7EEA\u5316\u5185\u5BB9",
+    "- \u4E0D\u8981\u7F16\u9020\u5BF9\u8BDD\u91CC\u6CA1\u6709\u51FA\u73B0\u8FC7\u7684\u4FE1\u606F",
+    "- \u8F93\u51FA\u53EA\u6709\u6458\u8981\u672C\u4F53\uFF0C\u4E0D\u8981\u4EFB\u4F55\u524D\u540E\u7F00\u3001\u6807\u9898\u6216\u8BF4\u660E",
+    ""
+  ];
+  if (oldSummary && oldSummary.trim()) {
+    parts.push(`\u3010\u5DF2\u6709\u7684\u65E9\u671F\u5BF9\u8BDD\u6458\u8981\u3011
+${oldSummary.trim()}`, "---");
+  }
+  parts.push(`\u3010\u672C\u6B21\u5F85\u538B\u7F29\u7684\u5BF9\u8BDD\u8BB0\u5F55\u3011
+${transcript}`);
+  return parts.join("\n");
+}
+async function summarizeViaAgent(input) {
+  const { adapter, cwd, oldSummary, transcript, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
+  const run = adapter.run({
+    runId: `compact-${Math.random().toString(36).slice(2, 10)}`,
+    prompt: buildAgentSummaryPrompt({ oldSummary, transcript }),
+    ...cwd ? { cwd } : {},
+    permissionMode: "bypassPermissions",
+    stopGraceMs: 5e3
+  });
+  let text = "";
+  let error;
+  const finished = (async () => {
+    for await (const evt of run.events) {
+      if (evt.type === "text") text += evt.delta;
+      else if (evt.type === "final_text") text = evt.content;
+      else if (evt.type === "error") {
+        error = evt.message;
+        break;
+      }
+    }
+  })();
+  let timer;
+  const timedOut = new Promise((_, reject4) => {
+    timer = setTimeout(() => {
+      void run.stop().catch(() => void 0);
+      reject4(new Error(`\u7528 ${adapter.displayName} \u505A\u6458\u8981\u8D85\u65F6\uFF08${timeoutMs}ms\uFF09`));
+    }, timeoutMs);
+  });
+  try {
+    await Promise.race([finished, timedOut]);
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (error) throw new Error(`\u7528 ${adapter.displayName} \u505A\u6458\u8981\u5931\u8D25\uFF1A${error}`);
+  const summary = text.trim();
+  if (!summary) throw new Error(`\u7528 ${adapter.displayName} \u505A\u6458\u8981\u8FD4\u56DE\u4E86\u7A7A\u5185\u5BB9`);
+  return summary;
+}
 
 // src/config/profile-schema.ts
 var COMPACTION_DEFAULTS = {
@@ -10592,30 +10651,42 @@ async function handleCompact(args, ctx) {
   const oldSummary = await store.summary(ctx.scope);
   const transcript = removed.map((entry) => `${entry.role === "user" ? "\u7528\u6237" : "\u52A9\u624B"}\uFF1A${entry.text}`).join("\n\n");
   const apiKey = await resolveCompactApiKey(cfg.llm.apiKey);
-  if (!apiKey) {
-    await reply(
-      ctx,
-      "\u274C \u627E\u4E0D\u5230\u6458\u8981\u6A21\u578B\u7684 API key\u3002\n\n\u8BF7\u914D\u7F6E `compaction.llm.apiKey`\uFF0C\u6216\u786E\u4FDD `~/.hermes/.env` \u91CC\u6709 `LOCAL_DEEPSEEK_API_KEY`\u3002"
-    );
-    return;
-  }
+  const compactCwd = effectiveWorkspaceCwd(ctx);
   log.info("compact", "start", {
     scope: ctx.scope,
     removedRounds,
     removedChars: removed.reduce((total, entry) => total + entry.text.length, 0),
     keepRounds,
-    model: cfg.llm.model
+    model: apiKey ? cfg.llm.model : `agent:${ctx.agent.id}`
   });
   let summary;
+  let usedAgent = false;
   try {
-    summary = await summarizeConversation({
-      baseUrl: cfg.llm.baseUrl,
-      model: cfg.llm.model,
-      apiKey,
-      oldSummary,
-      transcript,
-      timeoutMs: cfg.llm.timeoutMs
-    });
+    if (apiKey) {
+      summary = await summarizeConversation({
+        baseUrl: cfg.llm.baseUrl,
+        model: cfg.llm.model,
+        apiKey,
+        oldSummary,
+        transcript,
+        timeoutMs: cfg.llm.timeoutMs
+      });
+    } else if (ctx.agent) {
+      usedAgent = true;
+      summary = await summarizeViaAgent({
+        adapter: ctx.agent,
+        cwd: compactCwd,
+        oldSummary,
+        transcript,
+        timeoutMs: cfg.llm.timeoutMs
+      });
+    } else {
+      await reply(
+        ctx,
+        "\u274C \u627E\u4E0D\u5230\u53EF\u7528\u7684\u6458\u8981\u9014\u5F84\uFF1A\u65E2\u6CA1\u6709\u914D\u7F6E\u6458\u8981\u6A21\u578B API key\uFF0C\u5F53\u524D\u4E5F\u6CA1\u6709\u53EF\u7528 agent\u3002\n\n\u8BF7\u914D\u7F6E `compaction.llm.apiKey`\uFF08OpenAI \u517C\u5BB9\u7AEF\u70B9\uFF09\u540E\u91CD\u8BD5\u3002"
+      );
+      return;
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.warn("compact", "llm-failed", { scope: ctx.scope, err: msg });
@@ -10632,6 +10703,10 @@ async function handleCompact(args, ctx) {
     summaryChars: result.summaryChars
   });
   const preview2 = summary.length > 400 ? `${summary.slice(0, 400)}\u2026` : summary;
+  const usedNote = usedAgent ? `
+
+> \u2699\uFE0F \u672A\u914D\u7F6E\u6458\u8981\u6A21\u578B key\uFF0C\u672C\u6B21\u81EA\u52A8\u7528\u5F53\u524D agent\u300C${ctx.agent.displayName}\u300D\u538B\u7F29\uFF08\u96F6\u914D\u7F6E\uFF0C\u7A0D\u6162\uFF09\u3002
+> \u60F3\u66F4\u5FEB\u53EF\u914D \`compaction.llm\`\uFF08OpenAI \u517C\u5BB9\u7AEF\u70B9\uFF09\u3002` : "";
   await reply(
     ctx,
     `\u2705 \u5DF2\u538B\u7F29 **${result.removedRounds}** \u8F6E\u5BF9\u8BDD\uFF08\u4FDD\u7559\u6700\u8FD1 ${result.keptRounds} \u8F6E\uFF09
@@ -10640,7 +10715,7 @@ async function handleCompact(args, ctx) {
 ${preview2}
 
 \u4E4B\u540E\u7684\u5BF9\u8BDD\uFF0Cagent \u4F1A\u81EA\u52A8\u643A\u5E26\u8FD9\u4EFD\u6458\u8981\u7EE7\u7EED\uFF0C\u4E0A\u4E0B\u6587\u4E0D\u518D\u65E0\u9650\u81A8\u80C0\u3002
-\u5982\u9700\u8C03\u6574\u4FDD\u7559\u8F6E\u6570\uFF1A\`/compact 10\`\uFF08\u4FDD\u7559\u6700\u8FD1 10 \u8F6E\uFF09\u3002`
+\u5982\u9700\u8C03\u6574\u4FDD\u7559\u8F6E\u6570\uFF1A\`/compact 10\`\uFF08\u4FDD\u7559\u6700\u8FD1 10 \u8F6E\uFF09\u3002${usedNote}`
   );
 }
 async function handleNewChat(rawName, ctx) {

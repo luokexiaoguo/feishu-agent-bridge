@@ -149,7 +149,10 @@ pnpm build         # 构建 dist（= pnpm build:web && tsup）
 
 ### 上下文压缩配置（/compact）
 
-`/compact` 依赖一个 OpenAI 兼容的摘要模型端点。**默认值指向本机开发环境**，其他机器部署时请配置成自己的端点，否则 `/compact` 会提示缺少 API key（不影响其他功能）：
+`/compact` 的摘要按以下优先级自动选择摘要源，**任何一台配置好 agent 的机器都能开箱即用**：
+
+1. **专用摘要模型**（推荐，快且省）：配置 `compaction.llm`，或自动探测环境变量 `LOCAL_DEEPSEEK_API_KEY` / `~/.hermes/.env`
+2. **复用当前 agent 本体**（零配置兜底）：上面都没有时，自动用当前 profile 的 agent（如 Claude Code）跑一次压缩——只要 agent 的模型配好就能用，只是稍慢
 
 ```jsonc
 {
@@ -176,7 +179,7 @@ pnpm build         # 构建 dist（= pnpm build:web && tsup）
 | `keepRounds` | `/compact` 无参数时保留的最近轮数，默认 `20` |
 | `llm.baseUrl` | OpenAI 兼容 base url（默认 `http://localhost:3000/v1`） |
 | `llm.model` | 摘要模型（默认 `deepseek-v4-flash`） |
-| `llm.apiKey` | 显式 API key；未配置时依次尝试环境变量 `LOCAL_DEEPSEEK_API_KEY` 与 `~/.hermes/.env`（本机 hermes 部署），都没有则 `/compact` 返回配置提示 |
+| `llm.apiKey` | 显式 API key；未配置时依次尝试环境变量 `LOCAL_DEEPSEEK_API_KEY` 与 `~/.hermes/.env`，都没有则**自动复用当前 agent 压缩**（此时可省略整个 `llm` 块） |
 | `llm.timeoutMs` | 摘要请求超时，默认 `30000` |
 
 ### 权限模型
@@ -215,7 +218,7 @@ Agent 能力使用 `"permissions"` 配置（双档），替代已废弃的旧版
 - `/new`（或 `/reset`）— 清空当前会话，从零开始
 - `/new chat [名字]` — 新建一个群（自动拉你和 bot 进去），继承当前 cwd 后开新会话
 - `/resume [N]` — 列出最近 N 个历史会话，点按钮一键恢复
-- `/compact [N]` — **上下文压缩**：把最近 N 轮（默认 20）之前的对话压成一段摘要，之后每轮回复自动携带；所有 agent（Claude / MiMo / Codex / OpenCode / OpenClaw / Hermes）统一生效。摘要模型默认本地 `http://localhost:3000/v1`（deepseek-v4-flash），可用 `compaction` 配置换成任意 OpenAI 兼容端点（见下方「上下文压缩配置」）
+- `/compact [N]` — **上下文压缩**：把最近 N 轮（默认 20）之前的对话压成一段摘要，之后每轮回复自动携带；所有 agent（Claude / MiMo / Codex / OpenCode / OpenClaw / Hermes）统一生效。摘要默认走本地 `http://localhost:3000/v1`（deepseek-v4-flash）；**未配置摘要模型 key 时自动复用当前 agent 本体压缩（零配置，开箱即用）**，也可用 `compaction` 配置指定任意 OpenAI 兼容端点（见下方「上下文压缩配置」）
 - `/status` — 当前 cwd / session / agent 状态卡片
 - `/help` — 命令速查卡片
 

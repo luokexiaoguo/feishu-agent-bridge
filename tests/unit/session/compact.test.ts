@@ -279,3 +279,117 @@ describe('resolveCompactApiKey (homedir-scoped)', () => {
     await expect(resolveCompactApiKey()).resolves.toBeUndefined();
   });
 });
+
+describe('summarizeViaAgent', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function fakeAdapter(events: import('../../../src/agent/types.js').AgentEvent[]): {
+    adapter: import('../../../src/agent/types.js').AgentAdapter;
+    lastRunOpts: () => import('../../../src/agent/types.js').AgentRunOptions | undefined;
+  } {
+    let captured: import('../../../src/agent/types.js').AgentRunOptions | undefined;
+    const adapter: import('../../../src/agent/types.js').AgentAdapter = {
+      id: 'claude',
+      displayName: 'Claude Code',
+      isAvailable: async () => true,
+      run: (opts) => {
+        captured = opts;
+        return {
+          runId: opts.runId,
+          events: (async function* () {
+            for (const evt of events) yield evt;
+          })(),
+          stop: async () => {},
+          waitForExit: async () => true,
+        };
+      },
+    };
+    return { adapter, lastRunOpts: () => captured };
+  }
+
+  it('collects the final_text as the summary', async () => {
+    const { adapter, lastRunOpts } = fakeAdapter([
+      { type: 'system' },
+      { type: 'text', delta: '- 用户要求' },
+      { type: 'text', delta: '记录任务' },
+      { type: 'final_text', content: '- 用户要求记录任务1、任务2。' },
+      { type: 'done', terminationReason: 'normal' },
+    ]);
+    const { summarizeViaAgent } = await import('../../../src/session/compact-llm.js');
+    const summary = await summarizeViaAgent({ adapter, transcript: '对话', cwd: '/tmp' });
+    expect(summary).toBe('- 用户要求记录任务1、任务2。');
+    expect(lastRunOpts()?.cwd).toBe('/tmp');
+    expect(lastRunOpts()?.permissionMode).toBe('bypassPermissions');
+    expect(lastRunOpts()?.prompt).toContain('会话压缩器');
+    expect(lastRunOpts()?.prompt).toContain('对话');
+  });
+
+  it('falls back to concatenated text deltas when there is no final_text', async () => {
+    const { adapter } = fakeAdapter([
+      { type: 'text', delta: '要点一' },
+      { type: 'text', delta: '\n要点二' },
+      { type: 'done', terminationReason: 'normal' },
+    ]);
+    const { summarizeViaAgent } = await import('../../../src/session/compact-llm.js');
+    await expect(summarizeViaAgent({ adapter, transcript: 't' })).resolves.toBe('要点一\n要点二');
+  });
+
+  it('includes the old summary in the prompt', async () => {
+    const { adapter, lastRunOpts } = fakeAdapter([
+      { type: 'final_text', content: '合并摘要' },
+      { type: 'done', terminationReason: 'normal' },
+    ]);
+    const { summarizeViaAgent } = await import('../../../src/session/compact-llm.js');
+    await summarizeViaAgent({ adapter, transcript: '新对话', oldSummary: '旧摘要' });
+    expect(lastRunOpts()?.prompt).toContain('已有的早期对话摘要');
+    expect(lastRunOpts()?.prompt).toContain('旧摘要');
+  });
+
+  it('throws on agent error events', async () => {
+    const { adapter } = fakeAdapter([
+      { type: 'error', message: 'spawn failed', terminationReason: 'failed' },
+    ]);
+    const { summarizeViaAgent } = await import('../../../src/session/compact-llm.js');
+    await expect(summarizeViaAgent({ adapter, transcript: 't' })).rejects.toThrow(/spawn failed/);
+  });
+
+  it('throws on empty summaries', async () => {
+    const { adapter } = fakeAdapter([{ type: 'done', terminationReason: 'normal' }]);
+    const { summarizeViaAgent } = await import('../../../src/session/compact-llm.js');
+    await expect(summarizeViaAgent({ adapter, transcript: 't' })).rejects.toThrow(/空内容/);
+  });
+
+  it('stops the run and throws when the agent hangs past the timeout', async () => {
+    vi.useFakeTimers();
+    let stopped = false;
+    const adapter: import('../../../src/agent/types.js').AgentAdapter = {
+      id: 'claude',
+      displayName: 'Claude Code',
+      isAvailable: async () => true,
+      run: () => ({
+        runId: 'x',
+        events: (async function* () {
+          // never yields a terminal event
+          while (true) {
+            await new Promise((r) => setTimeout(r, 60_000));
+            yield { type: 'text', delta: 'still going' };
+          }
+        })(),
+        stop: async () => {
+          stopped = true;
+        },
+        waitForExit: async () => false,
+      }),
+    };
+    const { summarizeViaAgent } = await import('../../../src/session/compact-llm.js');
+    const promise = summarizeViaAgent({ adapter, transcript: 't', timeoutMs: 1000 });
+    // Attach the rejection handler BEFORE advancing timers so the reject is
+    // never left unhandled; then advance past the timeout.
+    const assertion = expect(promise).rejects.toThrow(/摘要/);
+    await vi.advanceTimersByTimeAsync(2000);
+    await assertion;
+    expect(stopped).toBe(true);
+  });
+});

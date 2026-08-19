@@ -149,7 +149,10 @@ Config lives in `~/.lark-channel/config.json`:
 
 ### Context compression configuration (/compact)
 
-`/compact` needs an OpenAI-compatible summarizer endpoint. **The defaults point at a local dev setup**; deployments on other machines should set their own endpoint via `compaction`, otherwise `/compact` returns a missing-key hint (everything else keeps working):
+`/compact` picks its summarizer automatically, so **any machine with a configured agent works out of the box**:
+
+1. **Dedicated summary LLM** (recommended, fast & cheap): set `compaction.llm`, or rely on auto-detected `LOCAL_DEEPSEEK_API_KEY` env / `~/.hermes/.env`
+2. **Reuse the current agent** (zero-config fallback): when neither is present, the bridge runs a summarization pass with the profile's own agent (e.g. Claude Code) — as long as the agent's model is configured, it just works (slightly slower)
 
 ```jsonc
 {
@@ -176,7 +179,7 @@ Config lives in `~/.lark-channel/config.json`:
 | `keepRounds` | Rounds kept when `/compact` runs without an argument, default `20` |
 | `llm.baseUrl` | OpenAI-compatible base URL (default `http://localhost:3000/v1`) |
 | `llm.model` | Summarizer model (default `deepseek-v4-flash`) |
-| `llm.apiKey` | Explicit key; if unset, falls back to env `LOCAL_DEEPSEEK_API_KEY`, then `~/.hermes/.env` (local hermes deployments); if still absent, `/compact` prints a config hint |
+| `llm.apiKey` | Explicit key; if unset, falls back to env `LOCAL_DEEPSEEK_API_KEY`, then `~/.hermes/.env`; if still absent, **the current agent is reused for summarization** (the whole `llm` block can then be omitted) |
 | `llm.timeoutMs` | Summary request timeout, default `30000` |
 
 ### Permission model
@@ -215,7 +218,7 @@ Agent capabilities are gated by the `"permissions"` block instead of the legacy 
 - `/new` (or `/reset`) — Clear the current session
 - `/new chat [name]` — Create a new group chat (auto-invites you + bot), inherits current cwd
 - `/resume [N]` — List recent N sessions, restore with one click
-- `/compact [N]` — **Context compression**: fold conversation older than the newest N rounds (default 20) into a summary that is automatically injected into every future reply. Works uniformly for all agents (Claude / MiMo / Codex / OpenCode / OpenClaw / Hermes). The summary model defaults to a local `http://localhost:3000/v1` endpoint (deepseek-v4-flash); override with the `compaction` config (see below)
+- `/compact [N]` — **Context compression**: fold conversation older than the newest N rounds (default 20) into a summary that is automatically injected into every future reply. Works uniformly for all agents (Claude / MiMo / Codex / OpenCode / OpenClaw / Hermes). The summary defaults to a local `http://localhost:3000/v1` endpoint (deepseek-v4-flash); **with no summary key configured it automatically reuses the current agent (zero-config, works out of the box)**, or override with the `compaction` config (see below)
 - `/status` — Current cwd / session / agent status card
 - `/help` — Command cheat sheet card
 
