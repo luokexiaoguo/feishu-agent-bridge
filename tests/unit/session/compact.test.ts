@@ -393,3 +393,65 @@ describe('summarizeViaAgent', () => {
     expect(stopped).toBe(true);
   });
 });
+
+describe('summarizeViaClaudeNative', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function nativeAdapter(opts: {
+    events?: import('../../../src/agent/types.js').AgentEvent[];
+    capture?: (o: import('../../../src/agent/types.js').AgentRunOptions) => void;
+  } = {}): import('../../../src/agent/types.js').AgentAdapter {
+    return {
+      id: 'claude',
+      displayName: 'Claude Code',
+      isAvailable: async () => true,
+      run: (o) => {
+        opts.capture?.(o);
+        return {
+          runId: o.runId,
+          events: (async function* () {
+            for (const evt of opts.events ?? []) yield evt;
+          })(),
+          stop: async () => {},
+          waitForExit: async () => true,
+        };
+      },
+    };
+  }
+
+  it('dispatches /compact against the resumed session', async () => {
+    let captured: import('../../../src/agent/types.js').AgentRunOptions | undefined;
+    const adapter = nativeAdapter({ capture: (o) => (captured = o) });
+    const { summarizeViaClaudeNative } = await import('../../../src/session/compact-llm.js');
+    await expect(
+      summarizeViaClaudeNative({ adapter, sessionId: 'sess-123', cwd: '/tmp' }),
+    ).resolves.toBe(true);
+    expect(captured?.prompt).toBe('/compact');
+    expect(captured?.sessionId).toBe('sess-123');
+    expect(captured?.cwd).toBe('/tmp');
+  });
+
+  it('forwards focus instructions into the command', async () => {
+    let captured: import('../../../src/agent/types.js').AgentRunOptions | undefined;
+    const adapter = nativeAdapter({ capture: (o) => (captured = o) });
+    const { summarizeViaClaudeNative } = await import('../../../src/session/compact-llm.js');
+    await summarizeViaClaudeNative({
+      adapter,
+      sessionId: 's',
+      focus: 'focus on the auth bug fix',
+    });
+    expect(captured?.prompt).toBe('/compact focus on the auth bug fix');
+  });
+
+  it('throws when the claude run reports an error', async () => {
+    const adapter = nativeAdapter({
+      events: [{ type: 'error', message: 'claude exited with code 1', terminationReason: 'failed' }],
+    });
+    const { summarizeViaClaudeNative } = await import('../../../src/session/compact-llm.js');
+    await expect(
+      summarizeViaClaudeNative({ adapter, sessionId: 's' }),
+    ).rejects.toThrow(/claude exited with code 1/);
+  });
+});

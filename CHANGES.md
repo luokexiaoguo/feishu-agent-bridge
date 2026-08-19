@@ -18,6 +18,13 @@
 - 收益：新电脑只要 agent 模型配好（能跑任务），`/compact` 就**零配置开箱即用**，无需任何额外 LLM key。
 - 验证：真实 claude CLI 冒烟通过（5.8s 出摘要）；单测 490 全绿。
 
+## Claude 原生 /compact 透传（2026-08-20）
+
+- **修正此前调研错误**：Claude Code 的 `/compact` 不是只在 TUI 里可用——`claude -p --resume <session> "/compact"`（headless 模式）直接触发官方压缩（stderr 出现 `query_source: "compact"`、进程 exit 0；官方 Agent SDK 也支持以 prompt 发送 `/compact` 并返回 `compact_boundary`）。此前仅查 `claude --help` 文本就断言"headless 无手动压缩"，调研不彻底，已修正。
+- **claude profile 的 `/compact` 改为原生透传**（`summarizeViaClaudeNative`，`src/session/compact-llm.ts`）：直接对当前 scope 的 claude 会话执行 `claude -p --resume <session> "/compact [焦点指令]"`，压缩是 Claude Code 官方语义（compact_boundary、保留重要上下文），随后续 run 自动携带压缩后上下文；压缩完成后清空桥侧对该 scope 的历史记录，避免双份摘要。参数 `args` 作为焦点指令（如 `focus on auth bug`）。
+- 其他 agent（mimo/opencode/openclaw/codex/hermes）无原生压缩命令，保持桥摘要方案（`/compact [N]` = 保留最近 N 轮）。
+- 验证：真实 E2E 闭环——建会话种下事实 → 原生 /compact → resume 提问，事实完整保留（52s 全流程）；单测 493 全绿。
+
 ## 新功能：/compact 上下文压缩（2026-08-19，全 agent 统一）
 
 - **背景**：各 agent CLI（claude/codex/mimo/hermes/openclaw/opencode）的 headless 模式都没有统一的手动压缩入口（claude 的 `--autocompact` 仅自动、TUI 的 `/compact` 在 headless 下不可用）。桥此前不持有对话历史，无法提供压缩。

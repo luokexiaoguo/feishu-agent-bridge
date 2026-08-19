@@ -712,6 +712,43 @@ async function summarizeViaAgent(input) {
   if (!summary) throw new Error(`\u7528 ${adapter.displayName} \u505A\u6458\u8981\u8FD4\u56DE\u4E86\u7A7A\u5185\u5BB9`);
   return summary;
 }
+async function summarizeViaClaudeNative(input) {
+  const { adapter, sessionId, cwd, focus, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
+  const focusText = focus?.trim();
+  const run = adapter.run({
+    runId: `compact-native-${Math.random().toString(36).slice(2, 10)}`,
+    prompt: focusText ? `/compact ${focusText}` : "/compact",
+    sessionId,
+    ...cwd ? { cwd } : {},
+    permissionMode: "bypassPermissions",
+    stopGraceMs: 5e3
+  });
+  let error;
+  const finished = (async () => {
+    for await (const evt of run.events) {
+      if (evt.type === "error") {
+        error = evt.message;
+        break;
+      }
+    }
+  })();
+  let timer;
+  const timedOut = new Promise((_, reject4) => {
+    timer = setTimeout(() => {
+      void run.stop().catch(() => void 0);
+      reject4(new Error(`Claude \u539F\u751F\u538B\u7F29\u8D85\u65F6\uFF08${timeoutMs}ms\uFF09`));
+    }, timeoutMs);
+  });
+  try {
+    await Promise.race([finished, timedOut]);
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (error) throw new Error(`Claude \u539F\u751F\u538B\u7F29\u5931\u8D25\uFF1A${error}`);
+  return true;
+}
 
 // src/config/profile-schema.ts
 var COMPACTION_DEFAULTS = {
@@ -10624,8 +10661,42 @@ async function handleCompact(args, ctx) {
     await reply(ctx, "\u274C \u4E0A\u4E0B\u6587\u538B\u7F29\u5DF2\u505C\u7528\uFF08\u914D\u7F6E compaction.enabled=false\uFF09\u3002");
     return;
   }
-  let keepRounds = cfg.keepRounds;
   const argTrimmed = args.trim();
+  if (ctx.agent.id === "claude") {
+    const sessionId = ctx.sessions.getRaw(ctx.scope)?.sessionId;
+    if (sessionId) {
+      const focus = argTrimmed || void 0;
+      log.info("compact", "native-claude", { scope: ctx.scope, focus: focus ?? "" });
+      try {
+        await summarizeViaClaudeNative({
+          adapter: ctx.agent,
+          sessionId,
+          cwd: effectiveWorkspaceCwd(ctx),
+          focus,
+          timeoutMs: cfg.llm.timeoutMs
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn("compact", "native-claude-failed", { scope: ctx.scope, err: msg });
+        await reply(ctx, `\u274C Claude \u539F\u751F\u538B\u7F29\u5931\u8D25\uFF1A${msg}
+
+\uFF08\u4F1A\u8BDD\u672A\u6539\u52A8\uFF0C\u53EF\u91CD\u8BD5\uFF09`);
+        return;
+      }
+      await store.reset(ctx.scope).catch(
+        (err) => log.warn("compact", "reset-after-native-failed", { err: String(err) })
+      );
+      await reply(
+        ctx,
+        `\u2705 \u5DF2\u7528 **Claude \u539F\u751F /compact** \u538B\u7F29\u5F53\u524D\u4F1A\u8BDD\uFF08\u7B49\u6548\u4E8E\u5728\u7EC8\u7AEF\u6267\u884C \`claude -p --resume "/compact"\`\uFF09\u3002
+
+\u4E4B\u540E\u7684\u6D88\u606F\u4F1A\u5E26\u7740\u538B\u7F29\u540E\u7684\u4E0A\u4E0B\u6587\u7EE7\u7EED\u3002` + (focus ? `
+\u7126\u70B9\u6307\u4EE4\uFF1A\`${focus}\`` : "") + "\n\n> \u{1F4A1} \u5176\u4ED6 agent\uFF08mimo/opencode \u7B49\uFF09\u6CA1\u6709\u539F\u751F\u538B\u7F29\u547D\u4EE4\uFF0C\u8D70\u6865\u7684\u6458\u8981\u65B9\u6848\u3002"
+      );
+      return;
+    }
+  }
+  let keepRounds = cfg.keepRounds;
   if (argTrimmed) {
     const parsed = Number(argTrimmed);
     if (!Number.isFinite(parsed) || parsed < 0) {

@@ -216,3 +216,68 @@ export async function summarizeViaAgent(
   if (!summary) throw new Error(`用 ${adapter.displayName} 做摘要返回了空内容`);
   return summary;
 }
+
+export interface SummarizeViaClaudeNativeInput {
+  adapter: import('../agent/types').AgentAdapter;
+  /** The claude session to compact (must already exist — resume target). */
+  sessionId: string;
+  cwd?: string;
+  /** Optional focus instructions forwarded to `/compact <focus>`. */
+  focus?: string;
+  timeoutMs?: number;
+}
+
+/**
+ * Claude-native compaction passthrough: run `/compact` directly against the
+ * claude CLI resumed session (`claude -p --resume <session> "/compact"`).
+ * This is a real terminal-passthrough — Claude Code's own compaction (the
+ * same as the TUI's `/compact`) summarizes the conversation and rewrites the
+ * session file; the next resumed run carries the compacted context.
+ *
+ * Compaction is silent in stream-json mode (no text events); completion is
+ * signalled by the process exiting 0. Errors surface as `error` events.
+ * Returns `true` on success.
+ */
+export async function summarizeViaClaudeNative(
+  input: SummarizeViaClaudeNativeInput,
+): Promise<boolean> {
+  const { adapter, sessionId, cwd, focus, timeoutMs = DEFAULT_COMPACT_TIMEOUT_MS } = input;
+  const focusText = focus?.trim();
+  const run = adapter.run({
+    runId: `compact-native-${Math.random().toString(36).slice(2, 10)}`,
+    prompt: focusText ? `/compact ${focusText}` : '/compact',
+    sessionId,
+    ...(cwd ? { cwd } : {}),
+    permissionMode: 'bypassPermissions',
+    stopGraceMs: 5000,
+  });
+
+  let error: string | undefined;
+  const finished = (async () => {
+    for await (const evt of run.events) {
+      if (evt.type === 'error') {
+        error = evt.message;
+        break;
+      }
+    }
+  })();
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      void run.stop().catch(() => undefined);
+      reject(new Error(`Claude 原生压缩超时（${timeoutMs}ms）`));
+    }, timeoutMs);
+  });
+
+  try {
+    await Promise.race([finished, timedOut]);
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+
+  if (error) throw new Error(`Claude 原生压缩失败：${error}`);
+  return true;
+}

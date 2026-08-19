@@ -48,6 +48,7 @@ import {
   resolveCompactApiKey,
   summarizeConversation,
   summarizeViaAgent,
+  summarizeViaClaudeNative,
 } from '../session/compact-llm';
 import { effectiveLarkCliIdentity } from '../config/profile-schema';
 import { resolveAppPaths } from '../config/app-paths';
@@ -381,10 +382,54 @@ async function handleCompact(args: string, ctx: CommandContext): Promise<void> {
     return;
   }
 
+  // Parse optional argument. For claude the argument is a /compact focus
+  // instruction (e.g. "focus on the auth fix"); for other agents it is the
+  // number of rounds to keep (e.g. 10). Both handled below.
+  const argTrimmed = args.trim();
+
+  // Claude 原生透传：claude 的 headless CLI 直接支持 `/compact` 命令
+  // （claude -p --resume <session> "/compact"），压缩是 Claude Code 官方
+  // 语义（compact_boundary、保留重要上下文），比桥的摘要更专业，且完全
+  // 等效于在终端里执行压缩。有可续接的 claude 会话就走这条，不再用桥模拟。
+  if (ctx.agent.id === 'claude') {
+    const sessionId = ctx.sessions.getRaw(ctx.scope)?.sessionId;
+    if (sessionId) {
+      const focus = argTrimmed || undefined;
+      log.info('compact', 'native-claude', { scope: ctx.scope, focus: focus ?? '' });
+      try {
+        await summarizeViaClaudeNative({
+          adapter: ctx.agent,
+          sessionId,
+          cwd: effectiveWorkspaceCwd(ctx),
+          focus,
+          timeoutMs: cfg.llm.timeoutMs,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn('compact', 'native-claude-failed', { scope: ctx.scope, err: msg });
+        await reply(ctx, `❌ Claude 原生压缩失败：${msg}\n\n（会话未改动，可重试）`);
+        return;
+      }
+      // 原生压缩后，桥记录的对话历史对 claude 已无意义（claude 会话本身
+      // 已被官方压缩），清空避免下次走桥摘要产生双份摘要。
+      await store.reset(ctx.scope).catch((err: unknown) =>
+        log.warn('compact', 'reset-after-native-failed', { err: String(err) }),
+      );
+      await reply(
+        ctx,
+        `✅ 已用 **Claude 原生 /compact** 压缩当前会话（等效于在终端执行 \`claude -p --resume "/compact"\`）。\n\n` +
+          '之后的消息会带着压缩后的上下文继续。' +
+          (focus ? `\n焦点指令：\`${focus}\`` : '') +
+          '\n\n> 💡 其他 agent（mimo/opencode 等）没有原生压缩命令，走桥的摘要方案。',
+      );
+      return;
+    }
+    // 无 claude 会话（还没聊过）→ 降级到桥摘要流程（下面）。
+  }
+
   // Parse optional "keep N rounds" argument: /compact 10 keeps the newest 10
   // user turns and folds everything older. Default = compaction.keepRounds.
   let keepRounds = cfg.keepRounds;
-  const argTrimmed = args.trim();
   if (argTrimmed) {
     const parsed = Number(argTrimmed);
     if (!Number.isFinite(parsed) || parsed < 0) {
