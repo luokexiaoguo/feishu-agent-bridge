@@ -53,6 +53,7 @@ import type { ScopeContext } from '../policy/run-policy';
 import { createOwnerRefreshController } from '../policy/owner';
 import { RunExecutor } from '../runtime/run-executor';
 import type { SessionCatalog } from '../session/catalog';
+import { CompactStore } from '../session/compact';
 import type { SessionStore } from '../session/store';
 import type { WorkspaceStore } from '../workspace/store';
 import { ActiveRuns, type RunHandle } from './active-runs';
@@ -178,11 +179,15 @@ export interface StartChannelDeps {
   sessionCatalog?: SessionCatalog;
   workspaces: WorkspaceStore;
   controls: Controls;
+  /** Per-scope conversation history used by `/compact`. Optional so tests and
+   * minimal embedders can start a channel without the feature. */
+  compactStore?: CompactStore;
   appPaths?: Pick<AppPaths, 'secretsFile' | 'keystoreSaltFile' | 'mediaDir'>;
 }
 
 export async function startChannel(deps: StartChannelDeps): Promise<BridgeChannel> {
   const { cfg, agent, sessions, sessionCatalog, workspaces, controls } = deps;
+  const compactStore = deps.compactStore;
   const activeRuns = new ActiveRuns();
   // ChatModeCache stays per-bridge-instance — invalidated on restart along
   // with everything else. Topic-mode chats only need one chat.get() call ever.
@@ -322,6 +327,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
           lastRunModelByScope,
           scope,
           mode,
+          compactStore,
         });
       } catch (err) {
         log.fail('flush', err);
@@ -352,6 +358,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
           logThreadModeOverride,
           executor,
           pool,
+          compactStore,
         }),
       ).catch((err) => log.fail('intake', err));
     },
@@ -650,6 +657,7 @@ interface IntakeDeps {
   logThreadModeOverride: LogThreadModeOverride;
   executor: RunExecutor;
   pool: ProcessPool;
+  compactStore?: CompactStore;
 }
 
 type LogThreadModeOverride = (input: {
@@ -673,6 +681,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     logThreadModeOverride,
     executor,
     pool,
+    compactStore,
   } = deps;
   const preview = msg.content.length > 80 ? `${msg.content.slice(0, 80)}…` : msg.content;
   // Resolve scope (and underlying chat mode) once at intake — every
@@ -789,6 +798,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     workspaces,
     agent,
     activeRuns,
+    compactStore,
     sessionCatalog,
     sessionCatalogIdentity: await commandSessionCatalogIdentity({
       msg: emsg,
@@ -827,6 +837,7 @@ interface RunBatchDeps {
   lastRunModelByScope: Map<string, string>;
   scope: string;
   mode: ChatMode;
+  compactStore?: CompactStore;
 }
 
 async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
@@ -845,6 +856,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     lastRunModelByScope,
     scope,
     mode,
+    compactStore,
   } = deps;
   if (batch.length === 0) return;
   const firstMsg = batch[0];
@@ -947,8 +959,25 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     channel.botIdentity,
     extraInstructions,
   );
+  // /compact 注入：早期对话摘要块（不是用户当前输入，是桥注入的浓缩历史）。
+  let effectivePrompt = prompt;
+  if (compactStore) {
+    const compacted = await compactStore.summary(scope);
+    if (compacted) {
+      effectivePrompt =
+        `<compacted_context>\n以下是本会话早期对话的压缩摘要（不是用户当前输入）：\n${compacted}\n</compacted_context>\n\n${prompt}`;
+      log.info('compact', 'injected', { scope, summaryChars: compacted.length });
+    }
+    // 记录本轮用户输入（命令已被 tryHandleCommand 拦截，不进入这里）。
+    const recordFileKeys = batch.flatMap((m) => m.resources.map((r) => r.fileKey));
+    const userRecord = batch
+      .map((m) => stripAttachmentRefs(m.content, recordFileKeys).trim())
+      .filter(Boolean)
+      .join('\n');
+    if (userRecord) await compactStore.appendUser(scope, userRecord);
+  }
   log.info('prompt', 'built', {
-    promptChars: prompt.length,
+    promptChars: effectivePrompt.length,
     quotes: quotes.length,
     topicContext: topicContext.length,
     ...(modelSwitched ? { modelSwitchedTo: modelSelection } : {}),
@@ -989,7 +1018,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
   const flow = await startRunFlow({
     scopeId: scope,
     scope: scopeContext,
-    prompt,
+    prompt: effectivePrompt,
     attachments: attachments.map(toPolicyAttachment),
     access: accessDecision,
     capability,
@@ -1159,6 +1188,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           replyMode,
           sendOpts,
           cardRenderOptions,
+          compactStore,
         });
         return;
       }
@@ -1239,6 +1269,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           replyMode,
           sendOpts,
           cardRenderOptions,
+          compactStore,
         });
       } else if (progress.opened() && !progress.abandoned()) {
         await sendFinalReply({
@@ -1249,6 +1280,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           replyMode,
           sendOpts,
           cardRenderOptions,
+          compactStore,
         });
       }
     } else if (replyMode === 'markdown') {
@@ -1358,6 +1390,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           replyMode,
           sendOpts,
           cardRenderOptions,
+          compactStore,
         });
       }
     } else {
@@ -1383,6 +1416,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
         replyMode,
         sendOpts,
         cardRenderOptions,
+        compactStore,
       });
     }
   } catch (err) {
@@ -1559,6 +1593,8 @@ async function sendFinalReply(input: {
   replyMode: ReturnType<typeof getMessageReplyMode>;
   sendOpts: { replyTo: string; replyInThread?: boolean };
   cardRenderOptions: { signCallback?: (action: string) => string };
+  /** When set, records the delivered reply text into /compact history. */
+  compactStore?: CompactStore;
 }): Promise<void> {
   const body = renderText(input.state);
 
@@ -1568,6 +1604,13 @@ async function sendFinalReply(input: {
   if (!body.trim()) {
     log.info('outbound', 'skip-empty', { scope: input.scope, mode: input.replyMode });
     return;
+  }
+
+  // Record the delivered assistant reply for /compact history.
+  if (input.compactStore) {
+    await input.compactStore
+      .appendAssistant(input.scope, body)
+      .catch((err: unknown) => log.warn('compact', 'append-assistant-failed', { err: String(err) }));
   }
 
   if (input.replyMode === 'card') {

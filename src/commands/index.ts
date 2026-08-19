@@ -43,6 +43,11 @@ import type {
   ProfileConfig,
   ProfileMode,
 } from '../config/profile-schema';
+import { CompactStore } from '../session/compact';
+import {
+  resolveCompactApiKey,
+  summarizeConversation,
+} from '../session/compact-llm';
 import { effectiveLarkCliIdentity } from '../config/profile-schema';
 import { resolveAppPaths } from '../config/app-paths';
 import { accessToClaudePermissionMode } from '../config/permissions';
@@ -143,6 +148,8 @@ export interface CommandContext {
     options: ListCodexThreadHistoryOptions,
   ) => Promise<CodexThreadHistoryEntry[]>;
   claudeHistoryProvider?: (cwd: string, limit: number) => Promise<SessionSummary[]>;
+  /** Per-scope conversation history used by `/compact`. */
+  compactStore?: CompactStore;
   /** Set when invoked from a CardKit 2.0 form submit. Keys are input `name`s. */
   formValue?: Record<string, unknown>;
   /** True when this invocation came from a card button click rather than a
@@ -174,6 +181,7 @@ const handlers: Record<string, Handler> = {
   '/cd': handleCd,
   '/ws': handleWs,
   '/resume': handleResume,
+  '/compact': handleCompact,
   '/status': handleStatus,
   '/help': handleHelp,
   '/account': handleAccount,
@@ -345,7 +353,122 @@ async function handleNew(args: string, ctx: CommandContext): Promise<void> {
     });
   }
   ctx.sessions.clear(ctx.scope);
+  await ctx.compactStore?.reset(ctx.scope).catch((err: unknown) =>
+    log.warn('compact', 'reset-failed', { err: String(err) }),
+  );
   await reply(ctx, wasRunning ? '已中断当前任务并开始新会话。' : '已开始新会话。');
+}
+
+/**
+ * `/compact [N]` — 把本会话早期对话压缩成摘要。
+ *
+ * 桥自己记录每轮对话（user + assistant），这个命令把「最近 N 轮之前」的
+ * 历史交给摘要 LLM（默认本地 new-api deepseek-v4-flash，复用玄策的 key）
+ * 压成一段早期对话摘要，之后每次 run 都会注入到 prompt 顶部。所有 agent
+ * （claude/codex/mimo/hermes/openclaw/opencode）统一生效，因为注入发生在
+ * 桥层，与 agent 无关。
+ */
+async function handleCompact(args: string, ctx: CommandContext): Promise<void> {
+  const cfg = ctx.controls.profileConfig.compaction;
+  const store = ctx.compactStore;
+  if (!store) {
+    await reply(ctx, '❌ 当前运行环境未启用上下文压缩（缺少 compact store）。');
+    return;
+  }
+  if (!cfg.enabled) {
+    await reply(ctx, '❌ 上下文压缩已停用（配置 compaction.enabled=false）。');
+    return;
+  }
+
+  // Parse optional "keep N rounds" argument: /compact 10 keeps the newest 10
+  // user turns and folds everything older. Default = compaction.keepRounds.
+  let keepRounds = cfg.keepRounds;
+  const argTrimmed = args.trim();
+  if (argTrimmed) {
+    const parsed = Number(argTrimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      await reply(ctx, '❌ 用法：`/compact [N]`，N = 保留的最近对话轮数（非负整数）。');
+      return;
+    }
+    keepRounds = Math.floor(parsed);
+  }
+
+  const entries = await store.entries(ctx.scope);
+  if (entries.length === 0) {
+    await reply(ctx, '当前会话还没有可压缩的对话记录（发送过消息后才会开始记录）。');
+    return;
+  }
+
+  // 定位保留起点：从后往前数第 keepRounds 条 user 消息（1 轮 = 1 条 user
+  // 消息及其后续 assistant 回复）。keepRounds=0 表示全部压缩。
+  const userIndexes = entries
+    .map((entry, index) => (entry.role === 'user' ? index : -1))
+    .filter((index) => index >= 0);
+  const keepFrom = keepRounds <= 0 ? entries.length : (userIndexes[userIndexes.length - keepRounds] ?? 0);
+  const removed = entries.slice(0, keepFrom);
+  const removedRounds = removed.filter((entry) => entry.role === 'user').length;
+  if (removedRounds === 0) {
+    const kept = entries.filter((entry) => entry.role === 'user').length;
+    await reply(ctx, `当前会话只有最近 ${kept} 轮对话，无需压缩（保留阈值 ${keepRounds} 轮）。`);
+    return;
+  }
+
+  const oldSummary = await store.summary(ctx.scope);
+  const transcript = removed
+    .map((entry) => `${entry.role === 'user' ? '用户' : '助手'}：${entry.text}`)
+    .join('\n\n');
+
+  const apiKey = await resolveCompactApiKey(cfg.llm.apiKey);
+  if (!apiKey) {
+    await reply(
+      ctx,
+      '❌ 找不到摘要模型的 API key。\n\n请配置 `compaction.llm.apiKey`，或确保 `~/.hermes/.env` 里有 `LOCAL_DEEPSEEK_API_KEY`。',
+    );
+    return;
+  }
+
+  log.info('compact', 'start', {
+    scope: ctx.scope,
+    removedRounds,
+    removedChars: removed.reduce((total, entry) => total + entry.text.length, 0),
+    keepRounds,
+    model: cfg.llm.model,
+  });
+
+  let summary: string;
+  try {
+    summary = await summarizeConversation({
+      baseUrl: cfg.llm.baseUrl,
+      model: cfg.llm.model,
+      apiKey,
+      oldSummary,
+      transcript,
+      timeoutMs: cfg.llm.timeoutMs,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn('compact', 'llm-failed', { scope: ctx.scope, err: msg });
+    await reply(ctx, `❌ 压缩失败：${msg}\n\n（会话记录未改动，可重试）`);
+    return;
+  }
+
+  const result = await store.applyCompaction(ctx.scope, keepFrom, summary);
+  log.info('compact', 'done', {
+    scope: ctx.scope,
+    removedRounds: result.removedRounds,
+    keptRounds: result.keptRounds,
+    summaryChars: result.summaryChars,
+  });
+
+  const preview =
+    summary.length > 400 ? `${summary.slice(0, 400)}…` : summary;
+  await reply(
+    ctx,
+    `✅ 已压缩 **${result.removedRounds}** 轮对话（保留最近 ${result.keptRounds} 轮）\n\n` +
+      `📋 早期对话摘要：\n${preview}\n\n` +
+      '之后的对话，agent 会自动携带这份摘要继续，上下文不再无限膨胀。\n' +
+      '如需调整保留轮数：`/compact 10`（保留最近 10 轮）。',
+  );
 }
 
 async function handleNewChat(rawName: string, ctx: CommandContext): Promise<void> {

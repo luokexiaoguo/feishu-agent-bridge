@@ -4,6 +4,24 @@
 > 传输层不变：仍基于 `@larksuite/channel`（WebSocket 长连接，与 dsh-lark-channel 同源）。
 > 2026-08-17 CLI 更名为 `feishu-agent-bridge`（自有品牌）；新增 OpenCode / OpenClaw / Hermes 适配器。
 
+## 新功能：/compact 上下文压缩（2026-08-19，全 agent 统一）
+
+- **背景**：各 agent CLI（claude/codex/mimo/hermes/openclaw/opencode）的 headless 模式都没有统一的手动压缩入口（claude 的 `--autocompact` 仅自动、TUI 的 `/compact` 在 headless 下不可用）。桥此前不持有对话历史，无法提供压缩。
+- **实现**：
+  - 桥新增每会话对话记录（`src/session/compact.ts`，CompactStore）：每轮 user 消息 + assistant 最终回复落盘到 `<profileDir>/compact/<sha1(scope)>.json`（原子写、0600、单条 8k / 总量 2000 条上限），与 agent 类型无关。
+  - 新指令 `/compact [N]`（`src/commands/index.ts`）：把「最近 N 轮（默认 20，N=0 全压）之前」的历史交给摘要 LLM，压成早期对话摘要；`/new` 会清空压缩记录。
+  - 摘要 LLM（`src/session/compact-llm.ts`）：OpenAI 兼容 `POST {baseUrl}/chat/completions`，默认 `http://localhost:3000/v1` + `deepseek-v4-flash`（本机 new-api，与 hermes 玄策同源）；key 解析顺序：`compaction.llm.apiKey` → 环境变量 `LOCAL_DEEPSEEK_API_KEY` → `~/.hermes/.env`；都没有则 `/compact` 返回配置提示，**不影响其他功能**。
+  - 注入：每次 run 时若存在摘要，在 prompt 顶部注入 `<compacted_context>` 块（`src/bot/channel.ts` + `src/agent/bridge-system-prompt.ts` 已加说明），agent 视为早期对话背景。注入发生在桥层，与 agent 无关 → **所有 agent 统一生效**。
+- **配置**（profile config 的 `compaction` 字段，均有默认值，可整体省略）：
+  ```jsonc
+  { "profiles": { "claude": { "compaction": {
+      "enabled": true, "keepRounds": 20,
+      "llm": { "baseUrl": "https://.../v1", "model": "...", "apiKey": "sk-...", "timeoutMs": 30000 }
+  } } } }
+  ```
+- **验证**：单测 484 全绿（新增 16 个覆盖 CompactStore / summarizeConversation / key 解析）；E2E 真调本地 new-api 冒烟通过（2.1s 出摘要、保留/移除轮数正确）。
+- **可移植性**：代码与机器无关；仅默认 LLM 端点指向本机，其他机器部署需配置自己的 `compaction.llm`（README 已加说明）。
+
 ## 新增适配器：OpenClaw（2026-08-17）
 
 - 新 `agentKind: 'openclaw'`，`src/agent/openclaw/`（adapter + argv），走 `openclaw agent --json` 单轮模式（spawn `openclaw agent --agent <id> -m <prompt> --json`，解析 result.payloads 为最终答案）。
