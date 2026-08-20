@@ -4,6 +4,12 @@
 > 传输层不变：仍基于 `@larksuite/channel`（WebSocket 长连接，与 dsh-lark-channel 同源）。
 > 2026-08-17 CLI 更名为 `feishu-agent-bridge`（自有品牌）；新增 OpenCode / OpenClaw / Hermes 适配器。
 
+## 修复：思考气泡"思考→撤回→再思考"（2026-08-20）
+
+- **根因**：`consumeCotEvents`（src/bot/cot.ts）在每次推理区重开时都发 `REASONING_MESSAGE_START`，且 messageId 恒为 `reasoning-<runSeq>`。对照 dsh-lark 事件规范（`~/下载/air/dsh-lark-cot-eventspec.md`）：**REASONING_MESSAGE_START 只在 run 内首个 reasoning-delta 发一次**，推理区可多次开关（thinking → tool → thinking），重开只续发 CONTENT。同 messageId 重复 START 会让飞书客户端**拆除旧推理块重建**，UI 上即"先开始思考 → 撤回 → 再开始思考"。分段思考的 agent（如 claude 在 Windows 上）会频繁触发。
+- **修复**：`reasoningStarted` 标志——START 仅 run 内首次；重开推理区只发 CONTENT（END 照常在工具调用前发）。
+- **验证**：新增回归测试（思考→工具→思考→文本，START=1 / CONTENT=2 / END=2）；单测 476 全绿。
+
 ## 服务名统一为 feishu-agent-bridge.bot.*（2026-08-20）
 
 - `src/daemon/paths.ts` 的 `SERVICE_NAME` 由 `lark-channel-bridge.bot` 改为 **`feishu-agent-bridge.bot`**——systemd unit 名 / launchd label / Windows task 名现在与仓库名、CLI 名完全一致（此前 CLI 已改名，但服务名仍用旧品牌，导致「仓库一个名、本机一个名」的割裂）。

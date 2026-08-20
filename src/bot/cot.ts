@@ -339,6 +339,14 @@ export async function consumeCotEvents(
   opts: { detail: CotMessagesMode },
 ): Promise<void> {
   let reasoningOpen = false;
+  // dsh-lark parity: REASONING_MESSAGE_START is sent ONLY once per run (the
+  // first reasoning delta). The reasoning area may close (END before a tool
+  // call) and reopen between tool calls — a reopened area continues with
+  // CONTENT only. Re-sending START with the same messageId makes the Feishu
+  // client tear the old reasoning block down and create a new one, which
+  // renders as "思考 → 撤回 → 再思考" (agents whose thinking is split across
+  // multiple segments, e.g. claude on Windows, hit this constantly).
+  let reasoningStarted = false;
   let textMessageOpen = false;
   let textMessageIndex = 0;
   let textMessageId: string | undefined;
@@ -358,10 +366,16 @@ export async function consumeCotEvents(
           // Emitting REASONING_START made the Feishu client treat the block
           // as "to be shown when done" (collapsed "思考已完成" until complete),
           // instead of streaming the reasoning live into the bubble.
-          publisher.enqueue('REASONING_MESSAGE_START', {
-            messageId: reasoningMessageId,
-            role: 'reasoning',
-          });
+          // START fires once per run; a reopened reasoning area (thinking →
+          // tool → thinking) continues with CONTENT only, so the client never
+          // tears down and rebuilds the block.
+          if (!reasoningStarted) {
+            reasoningStarted = true;
+            publisher.enqueue('REASONING_MESSAGE_START', {
+              messageId: reasoningMessageId,
+              role: 'reasoning',
+            });
+          }
         }
         publisher.enqueue('REASONING_MESSAGE_CONTENT', {
           messageId: reasoningMessageId,

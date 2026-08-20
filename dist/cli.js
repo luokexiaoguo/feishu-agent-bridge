@@ -14429,6 +14429,7 @@ function finalAnswerOnlyState(state) {
 }
 async function consumeCotEvents(events, publisher, opts) {
   let reasoningOpen = false;
+  let reasoningStarted = false;
   let textMessageOpen = false;
   let textMessageIndex = 0;
   let textMessageId;
@@ -14441,10 +14442,13 @@ async function consumeCotEvents(events, publisher, opts) {
         closeTextIfNeeded();
         if (!reasoningOpen) {
           reasoningOpen = true;
-          publisher.enqueue("REASONING_MESSAGE_START", {
-            messageId: reasoningMessageId,
-            role: "reasoning"
-          });
+          if (!reasoningStarted) {
+            reasoningStarted = true;
+            publisher.enqueue("REASONING_MESSAGE_START", {
+              messageId: reasoningMessageId,
+              role: "reasoning"
+            });
+          }
         }
         publisher.enqueue("REASONING_MESSAGE_CONTENT", {
           messageId: reasoningMessageId,

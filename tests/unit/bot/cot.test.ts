@@ -190,6 +190,40 @@ describe('COT event mapping', () => {
   });
 });
 
+describe('COT segmented reasoning', () => {
+  it('sends REASONING_MESSAGE_START only once even when thinking is split across tool calls', async () => {
+    const client = new FakeCotClient();
+    const publisher = new CotPublisher({
+      client,
+      chatId: 'oc_chat',
+      originMessageId: 'om_origin',
+      runId: 'run-seg',
+      scope: 'oc_chat',
+      inputPreview: 'split thinking',
+    });
+    await publisher.start();
+
+    // thinking -> tool -> thinking -> text: the reopened reasoning area must
+    // continue with CONTENT only — re-STARTing with the same messageId makes
+    // Feishu tear down and rebuild the block ("思考 → 撤回 → 再思考").
+    await consumeCotEvents(iterate([
+      { type: 'thinking', delta: '第一段思考' },
+      { type: 'tool_use', id: 't1', name: 'command_execution', input: { command: 'ls' } },
+      { type: 'tool_result', id: 't1', output: 'ok', isError: false },
+      { type: 'thinking', delta: '第二段思考' },
+      { type: 'text', delta: '最终回答。' },
+      { type: 'done', terminationReason: 'normal' },
+    ]), publisher, { detail: 'brief' });
+
+    const starts = client.events.filter((e) => e.event_type === 'REASONING_MESSAGE_START');
+    const contents = client.events.filter((e) => e.event_type === 'REASONING_MESSAGE_CONTENT');
+    const ends = client.events.filter((e) => e.event_type === 'REASONING_MESSAGE_END');
+    expect(starts).toHaveLength(1); // 仅首次——重开推理区不再重复 START
+    expect(contents.map((e) => JSON.parse(e.content).delta)).toEqual(['第一段思考', '第二段思考']);
+    expect(ends).toHaveLength(2);   // 推理区开了两次各关一次：tool_use 前 + text 前
+  });
+});
+
 class FakeCotClient {
   events: Array<{ event_type: string; content: string; timestamp: string }> = [];
   completed: string[] = [];
