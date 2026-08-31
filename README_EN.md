@@ -2,6 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-BSD--3--Clause-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20.12-green)](https://nodejs.org/)
+[![Sponsor](https://img.shields.io/badge/Sponsor-afdian-EA5FEE)](https://afdian.com/a/luokexiaoguo)
 
 **[中文](README.md)** | **[English](README_EN.md)**
 
@@ -275,3 +276,9 @@ Agent capabilities are gated by the `"permissions"` block instead of the legacy 
 - License: [BSD-3-Clause](./LICENSE). Derived from [zarazhangrui/lark-coding-agent-bridge](https://github.com/zarazhangrui/lark-coding-agent-bridge); upstream license retained.
 - **Acknowledgments**: The interaction model (native thinking-process bubbles, session management, in-chat configuration, etc.) draws on design elements from [dsh-lark (Feishu DeepSeek Harness plugin)](https://github.com/omdsh-dev/dsh-lark). Special thanks to the dsh-lark project.
 - Transport SDK: [`@larksuite/channel`](https://www.npmjs.com/package/@larksuite/channel)
+
+## ❤️ Sponsor
+
+If you find this project helpful, please consider supporting the author ☕
+
+[afdian](https://afdian.com/a/luokexiaoguo) · Email: luokexiaoguo@foxmail.com

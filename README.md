@@ -2,6 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-BSD--3--Clause-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20.12-green)](https://nodejs.org/)
+[![Sponsor](https://img.shields.io/badge/赞助-爱发电-EA5FEE)](https://afdian.com/a/luokexiaoguo)
 
 **[中文](README.md)** | **[English](README_EN.md)**
 
@@ -275,3 +276,9 @@ Agent 能力使用 `"permissions"` 配置（双档），替代已废弃的旧版
 - 许可证：[BSD-3-Clause](./LICENSE)。本仓库派生自 [zarazhangrui/lark-coding-agent-bridge](https://github.com/zarazhangrui/lark-coding-agent-bridge)，保留上游许可证。
 - **致谢**：本项目的表现形态（原生思考过程气泡、会话管理、飞书内交互等）借鉴了 [dsh-lark（飞书 DeepSeek Harness（DSH）插件）](https://github.com/omdsh-dev/dsh-lark) 的部分设计，特此致谢。
 - 传输 SDK：[`@larksuite/channel`](https://www.npmjs.com/package/@larksuite/channel)
+
+## ❤️ 赞助
+
+如果这个项目对你有帮助，欢迎请作者喝杯咖啡 ☕
+
+[爱发电](https://afdian.com/a/luokexiaoguo) · 邮箱：luokexiaoguo@foxmail.com
