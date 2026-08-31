@@ -18872,8 +18872,21 @@ async function* createEventStream6(ctx) {
     yield { type: "done", terminationReason: stopReason };
     return;
   }
+  let parsed = null;
+  if (stdout.trim()) {
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+    }
+  }
+  if (parsed && typeof parsed === "object" && parsed.ok === false) {
+    const env = parsed;
+    const detail = env.error?.message || env.summary || JSON.stringify(parsed).slice(0, 300);
+    yield { type: "error", message: `openclaw agent failed: ${detail}`, terminationReason: "failed" };
+    return;
+  }
   const runtimeError = ctx.getError();
-  if (exitCode !== 0 && exitCode !== null) {
+  if (exitCode !== 0 && exitCode !== null && !parsed) {
     const stderr = Buffer.concat(ctx.stderrChunks).toString("utf8").trim();
     yield {
       type: "error",
@@ -18882,7 +18895,7 @@ async function* createEventStream6(ctx) {
     };
     return;
   }
-  if (runtimeError) {
+  if (runtimeError && !parsed) {
     yield {
       type: "error",
       message: `openclaw spawn failed: ${runtimeError.message}`,
@@ -18890,28 +18903,14 @@ async function* createEventStream6(ctx) {
     };
     return;
   }
-  let parsed;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    yield {
-      type: "error",
-      message: `openclaw agent returned unparsable output: ${stdout.slice(0, 200)}`,
-      terminationReason: "failed"
-    };
-    return;
-  }
-  const result = parsed;
+  const result = parsed ?? {};
   const payloads = result.result?.payloads ?? [];
   const text = payloads.map((p3) => p3.text ?? "").join("\n").trim();
   const agentMeta = result.result?.meta?.agentMeta ?? {};
   const sessionId = agentMeta.sessionId;
-  if (result.status !== "ok" && !text) {
-    yield {
-      type: "error",
-      message: `openclaw agent failed: ${JSON.stringify(result).slice(0, 300)}`,
-      terminationReason: "failed"
-    };
+  if (result.status !== "ok" && result.ok !== true && !text) {
+    const detail = result.summary || (parsed ? JSON.stringify(parsed).slice(0, 300) : stdout.slice(0, 200));
+    yield { type: "error", message: `openclaw agent failed: ${detail}`, terminationReason: "failed" };
     return;
   }
   yield { type: "system", sessionId, cwd: void 0 };

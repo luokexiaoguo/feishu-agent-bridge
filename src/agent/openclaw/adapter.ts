@@ -194,8 +194,32 @@ async function* createEventStream(ctx: StreamContext): AsyncGenerator<AgentEvent
     yield { type: 'done', terminationReason: stopReason };
     return;
   }
+
+  // OpenClaw 2026.8+ emits a JSON envelope on BOTH success and failure:
+  //   success: { runId, status:"ok", summary, result:{ payloads:[{text}], meta:{ agentMeta:{ sessionId, usage } } } } }
+  //   failure: { ok:false, runId, origin:"gateway", error:{ type:"cli_error", message } }
+  // The process also exits non-zero on failure, so parse stdout FIRST (before
+  // consulting exitCode/stderr) to surface the friendly error.message instead
+  // of the noisy [openclaw] stderr banner.
+  let parsed: unknown = null;
+  if (stdout.trim()) {
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      /* not JSON — fall through to exitCode/stderr handling */
+    }
+  }
+
+  // New-format failure envelope: { ok:false, error:{message} }.
+  if (parsed && typeof parsed === 'object' && (parsed as { ok?: unknown }).ok === false) {
+    const env = parsed as { error?: { message?: string }; summary?: string };
+    const detail = env.error?.message || env.summary || JSON.stringify(parsed).slice(0, 300);
+    yield { type: 'error', message: `openclaw agent failed: ${detail}`, terminationReason: 'failed' };
+    return;
+  }
+
   const runtimeError = ctx.getError();
-  if (exitCode !== 0 && exitCode !== null) {
+  if (exitCode !== 0 && exitCode !== null && !parsed) {
     const stderr = Buffer.concat(ctx.stderrChunks).toString('utf8').trim();
     yield {
       type: 'error',
@@ -204,7 +228,7 @@ async function* createEventStream(ctx: StreamContext): AsyncGenerator<AgentEvent
     };
     return;
   }
-  if (runtimeError) {
+  if (runtimeError && !parsed) {
     yield {
       type: 'error',
       message: `openclaw spawn failed: ${runtimeError.message}`,
@@ -213,20 +237,11 @@ async function* createEventStream(ctx: StreamContext): AsyncGenerator<AgentEvent
     return;
   }
 
-  // Parse the JSON result.
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    yield {
-      type: 'error',
-      message: `openclaw agent returned unparsable output: ${stdout.slice(0, 200)}`,
-      terminationReason: 'failed',
-    };
-    return;
-  }
-  const result = parsed as {
+  // Success path. parsed is null only when stdout was empty/unparseable.
+  const result = (parsed ?? {}) as {
     status?: string;
+    ok?: boolean;
+    summary?: string;
     result?: {
       payloads?: Array<{ text?: string }>;
       meta?: { agentMeta?: { sessionId?: string; usage?: { input?: number; output?: number } } };
@@ -234,15 +249,12 @@ async function* createEventStream(ctx: StreamContext): AsyncGenerator<AgentEvent
   };
   const payloads = result.result?.payloads ?? [];
   const text = payloads.map((p) => p.text ?? '').join('\n').trim();
-  // sessionId/usage live under meta.agentMeta (probed 2026-08-17).
+  // sessionId/usage live under result.meta.agentMeta (re-confirmed on 2026.8.1).
   const agentMeta = result.result?.meta?.agentMeta ?? {};
   const sessionId = agentMeta.sessionId;
-  if (result.status !== 'ok' && !text) {
-    yield {
-      type: 'error',
-      message: `openclaw agent failed: ${JSON.stringify(result).slice(0, 300)}`,
-      terminationReason: 'failed',
-    };
+  if (result.status !== 'ok' && result.ok !== true && !text) {
+    const detail = result.summary || (parsed ? JSON.stringify(parsed).slice(0, 300) : stdout.slice(0, 200));
+    yield { type: 'error', message: `openclaw agent failed: ${detail}`, terminationReason: 'failed' };
     return;
   }
 
